@@ -12,3 +12,4 @@ def test_fixture_smoke_is_idempotent(tmp_path: Path) -> None:
     assert first.unique_count == second.unique_count == 1
     assert first.company_count == second.company_count == 1
     assert second.duplicate_count == 0
+    assert first.unpublished_outbox_count == second.unpublished_outbox_count == 0

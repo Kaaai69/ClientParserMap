@@ -2,13 +2,14 @@ import argparse
 import asyncio
 import json
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 
 from app.core.config import Settings
 from app.core.enums import CMS, JobStatus, SourceName, WebsiteStatus, WebsiteType
 from app.db.base import Base
-from app.db.models import Company, SearchJob
+from app.db.models import Company, JobOutbox, SearchJob
 from app.db.repositories import SearchJobRepository
 from app.db.session import Database
 from app.jobs.pipeline import CompanyAnalysis, SearchPipeline
@@ -27,6 +28,7 @@ class SmokeResult:
     unique_count: int
     company_count: int
     duplicate_count: int
+    unpublished_outbox_count: int
 
 
 class FixtureSource:
@@ -94,6 +96,7 @@ async def _run_fixture_smoke(
                 criteria,
                 (SourceName.GOOGLE, SourceName.TWO_GIS),
             )
+            job.outbox.published_at = datetime.now(UTC)
             await session.commit()
             job_id = job.id
 
@@ -132,6 +135,14 @@ async def _run_fixture_smoke(
             company_count = int(
                 await session.scalar(select(func.count()).select_from(Company)) or 0
             )
+            unpublished_outbox_count = int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(JobOutbox)
+                    .where(JobOutbox.published_at.is_(None))
+                )
+                or 0
+            )
             if stored_job is None:
                 raise RuntimeError("fixture smoke job disappeared")
             if stored_job.status not in {
@@ -146,6 +157,7 @@ async def _run_fixture_smoke(
                 unique_count=stored_job.unique_count,
                 company_count=company_count,
                 duplicate_count=max(0, company_count - 1),
+                unpublished_outbox_count=unpublished_outbox_count,
             )
     finally:
         await database.dispose()
