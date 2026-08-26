@@ -16,4 +16,6 @@ htmlcov/
 *.egg-info/
 credentials*.json
 service-account*.json
+credentials/*
+!credentials/.gitkeep
 server.txt

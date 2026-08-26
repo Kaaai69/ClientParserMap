@@ -149,9 +149,7 @@ def _website_candidates(
     if company.cms in {CMS.TILDA, CMS.WIX, CMS.NETHOUSE}:
         candidates.append((rules.tilda_wix_nethouse, f"Сайт создан на {company.cms.value}"))
     if company.cms in {CMS.FLEXBE, CMS.CREATIUM, CMS.LPMOTOR}:
-        candidates.append(
-            (rules.flexbe_creatium_lpmotor, f"Сайт создан на {company.cms.value}")
-        )
+        candidates.append((rules.flexbe_creatium_lpmotor, f"Сайт создан на {company.cms.value}"))
     return candidates
 
 

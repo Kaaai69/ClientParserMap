@@ -21,6 +21,7 @@ from app.core.enums import (
     WebsiteType,
 )
 from app.core.errors import AppError
+from app.core.logging import get_logger
 from app.db.models import (
     Company,
     CompanyContact,
@@ -52,6 +53,7 @@ TERMINAL_JOB_STATUSES = {
     JobStatus.COMPLETED_WITH_ERRORS,
     JobStatus.FAILED,
 }
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +145,7 @@ class SearchPipeline:
             job.stage = JobStage.COLLECTING
             job.started_at = job.started_at or datetime.now(UTC)
             await session.commit()
+            logger.info("search_job_started", search_job_id=job.id, stage=job.stage.value)
 
             await self._sync_job_safely(session, job)
             await self._collect(session, job)
@@ -158,17 +161,21 @@ class SearchPipeline:
                 job.finished_at = datetime.now(UTC)
                 await session.commit()
                 await self._sync_job_safely(session, job)
+                logger.info(
+                    "search_job_finished",
+                    search_job_id=job.id,
+                    stage=job.stage.value,
+                    status=job.status.value,
+                    result_count=job.unique_count,
+                    error_count=job.error_count,
+                )
                 return
 
             await self._analyze(session, job)
             await self._score(session, job)
             await self._export(session, job)
 
-            job.status = (
-                JobStatus.COMPLETED_WITH_ERRORS
-                if job.error_count
-                else JobStatus.COMPLETED
-            )
+            job.status = JobStatus.COMPLETED_WITH_ERRORS if job.error_count else JobStatus.COMPLETED
             job.stage = JobStage.FINISHED
             job.finished_at = datetime.now(UTC)
             await session.commit()
@@ -176,6 +183,14 @@ class SearchPipeline:
             if not final_sync_succeeded and job.status is JobStatus.COMPLETED:
                 job.status = JobStatus.COMPLETED_WITH_ERRORS
                 await session.commit()
+            logger.info(
+                "search_job_finished",
+                search_job_id=job.id,
+                stage=job.stage.value,
+                status=job.status.value,
+                result_count=job.unique_count,
+                error_count=job.error_count,
+            )
 
     async def _collect(self, session: AsyncSession, job: SearchJob) -> None:
         criteria = SearchCriteria(
@@ -205,6 +220,12 @@ class SearchPipeline:
                     self._source_failure(job, state, _error_code(error))
                     await session.commit()
                     continue
+                logger.info(
+                    "source_page_received",
+                    search_job_id=job.id,
+                    source=state.source.value,
+                    result_count=len(page.items),
+                )
 
                 for record in page.items:
                     if accepted_total >= job.max_results:
@@ -461,7 +482,9 @@ class SearchPipeline:
                     )
                     .execution_options(populate_existing=True)
                 )
-            ).unique().all()
+            )
+            .unique()
+            .all()
         )
 
     @staticmethod
@@ -486,9 +509,7 @@ def _passes_filters(
     reviews_count: int | None,
     criteria: SearchCriteria,
 ) -> bool:
-    if criteria.min_rating is not None and (
-        rating is None or rating < criteria.min_rating
-    ):
+    if criteria.min_rating is not None and (rating is None or rating < criteria.min_rating):
         return False
     return not (
         criteria.min_reviews is not None
@@ -519,9 +540,7 @@ def _company_sheet_record(job: SearchJob, link: SearchJobCompany) -> CompanyShee
         city=company.city,
         address=company.address,
         primary_phone=primary_phone,
-        additional_phones=tuple(
-            item.value for item in phones if item.value != primary_phone
-        ),
+        additional_phones=tuple(item.value for item in phones if item.value != primary_phone),
         whatsapp=_contact_values(contacts_by_type, ContactType.WHATSAPP),
         telegram=_contact_values(contacts_by_type, ContactType.TELEGRAM),
         emails=_contact_values(contacts_by_type, ContactType.EMAIL),

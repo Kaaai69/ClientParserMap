@@ -27,14 +27,14 @@ FINGERPRINTS = (
     Fingerprint(CMS.WIX, "html", "wix.com website builder", 0.9, "Wix generator"),
     Fingerprint(CMS.WIX, "html", "wixstatic.com", 0.75, "Wix static assets"),
     Fingerprint(CMS.WIX, "html", "parastorage.com", 0.7, "Wix storage"),
-    Fingerprint(CMS.WORDPRESS, "html", "content=\"wordpress", 0.85, "WordPress generator"),
+    Fingerprint(CMS.WORDPRESS, "html", 'content="wordpress', 0.85, "WordPress generator"),
     Fingerprint(CMS.WORDPRESS, "html", "content='wordpress", 0.85, "WordPress generator"),
     Fingerprint(CMS.WORDPRESS, "html", "/wp-content/", 0.45, "WordPress content"),
     Fingerprint(CMS.WORDPRESS, "html", "/wp-includes/", 0.45, "WordPress includes"),
     Fingerprint(CMS.WORDPRESS, "headers", "wordpress", 0.55, "WordPress header"),
     Fingerprint(CMS.WEBFLOW, "html", "data-wf-page", 0.7, "Webflow page attribute"),
     Fingerprint(CMS.WEBFLOW, "html", "webflow.css", 0.65, "Webflow stylesheet"),
-    Fingerprint(CMS.WEBFLOW, "html", "content=\"webflow", 0.9, "Webflow generator"),
+    Fingerprint(CMS.WEBFLOW, "html", 'content="webflow', 0.9, "Webflow generator"),
     Fingerprint(CMS.BITRIX, "html", "/bitrix/", 0.8, "Bitrix assets"),
     Fingerprint(CMS.BITRIX, "headers", "bitrix", 0.85, "Bitrix header"),
     Fingerprint(CMS.NETHOUSE, "html", "nethouse.ru", 0.85, "Nethouse assets"),
@@ -51,9 +51,7 @@ FINGERPRINTS = (
 def detect_cms(html: str, headers: Mapping[str, str], url: str) -> CmsDetection:
     sources = {
         "html": html.casefold(),
-        "headers": "\n".join(
-            f"{key}: {value}" for key, value in headers.items()
-        ).casefold(),
+        "headers": "\n".join(f"{key}: {value}" for key, value in headers.items()).casefold(),
         "url": url.casefold(),
     }
     scores: dict[CMS, float] = {}

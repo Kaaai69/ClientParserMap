@@ -46,11 +46,7 @@ class ContactCrawler:
         self._user_agent = user_agent
 
     async def crawl(self, home: WebsiteFetchResult) -> tuple[ContactValue, ...]:
-        if (
-            home.status is not WebsiteStatus.ONLINE
-            or home.final_url is None
-            or home.html is None
-        ):
+        if home.status is not WebsiteStatus.ONLINE or home.final_url is None or home.html is None:
             return ()
         base_url = home.final_url
         origin = _origin(base_url)

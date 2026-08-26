@@ -47,9 +47,7 @@ def classify_website(url: str, html: str) -> WebsiteClassification:
     )
     website_type = WebsiteType.BUSINESS_CARD if is_card else WebsiteType.NORMAL
 
-    parking_evidence = [
-        marker for marker in PARKING_CONTENT_MARKERS if marker in content
-    ]
+    parking_evidence = [marker for marker in PARKING_CONTENT_MARKERS if marker in content]
     parked_host = any(marker in hostname for marker in PARKING_HOST_MARKERS)
     if parked_host or len(parking_evidence) >= 2:
         reasons = (["parking-host"] if parked_host else []) + parking_evidence
@@ -59,9 +57,7 @@ def classify_website(url: str, html: str) -> WebsiteClassification:
             reasons=tuple(reasons),
         )
 
-    placeholder_evidence = [
-        marker for marker in PLACEHOLDER_MARKERS if marker in content
-    ]
+    placeholder_evidence = [marker for marker in PLACEHOLDER_MARKERS if marker in content]
     word_count = len(content.split())
     if placeholder_evidence and word_count < 80:
         return WebsiteClassification(

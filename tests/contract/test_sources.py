@@ -27,9 +27,7 @@ async def test_google_maps_enterprise_fields_and_next_token(
     route = respx_mock.post("https://places.googleapis.com/v1/places:searchText").respond(
         json=fixture_json("google_places_page.json")
     )
-    source = GoogleSource(
-        Settings(_env_file=None, google_places_api_key=SecretStr("google-key"))
-    )
+    source = GoogleSource(Settings(_env_file=None, google_places_api_key=SecretStr("google-key")))
 
     page = await source.search_page(criteria(), None)
 
@@ -37,9 +35,7 @@ async def test_google_maps_enterprise_fields_and_next_token(
     assert page.items[0].phones == ("+7 999 123-45-67", "8 (999) 123-45-67")
     assert page.items[0].primary_phone == "+7 999 123-45-67"
     assert page.items[0].reviews_count == 137
-    assert "places.internationalPhoneNumber" in route.calls[0].request.headers[
-        "X-Goog-FieldMask"
-    ]
+    assert "places.internationalPhoneNumber" in route.calls[0].request.headers["X-Goog-FieldMask"]
 
 
 async def test_two_gis_maps_contacts_and_next_page(
@@ -49,9 +45,7 @@ async def test_two_gis_maps_contacts_and_next_page(
     respx_mock.get("https://catalog.api.2gis.com/3.0/items").respond(
         json=fixture_json("two_gis_page.json")
     )
-    source = TwoGisSource(
-        Settings(_env_file=None, two_gis_api_key=SecretStr("2gis-key"))
-    )
+    source = TwoGisSource(Settings(_env_file=None, two_gis_api_key=SecretStr("2gis-key")))
 
     page = await source.search_page(criteria(), None)
 
@@ -70,9 +64,7 @@ async def test_two_gis_missing_contact_permission_is_limited(
     payload = fixture_json("two_gis_page.json")
     payload["result"]["items"][0].pop("contact_groups")
     respx_mock.get("https://catalog.api.2gis.com/3.0/items").respond(json=payload)
-    source = TwoGisSource(
-        Settings(_env_file=None, two_gis_api_key=SecretStr("2gis-key"))
-    )
+    source = TwoGisSource(Settings(_env_file=None, two_gis_api_key=SecretStr("2gis-key")))
 
     page = await source.search_page(criteria(), None)
 

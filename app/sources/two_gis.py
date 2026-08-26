@@ -96,9 +96,7 @@ class TwoGisSource:
             longitude=_optional_float(point.get("lon")),
             working_hours=_optional_dict(item.get("schedule")),
             contacts_access=(
-                ContactsAccess.FULL
-                if "contact_groups" in item
-                else ContactsAccess.LIMITED
+                ContactsAccess.FULL if "contact_groups" in item else ContactsAccess.LIMITED
             ),
         )
 
@@ -114,9 +112,7 @@ def _group_contacts(raw_groups: object) -> dict[str, tuple[str, ...]]:
             if not isinstance(contact, dict):
                 continue
             contact_type = str(contact.get("type", "other")).lower()
-            value = _optional_text(contact.get("url")) or _optional_text(
-                contact.get("value")
-            )
+            value = _optional_text(contact.get("url")) or _optional_text(contact.get("value"))
             if not value:
                 continue
             bucket = collected.setdefault(contact_type, [])

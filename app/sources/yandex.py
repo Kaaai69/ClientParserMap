@@ -20,9 +20,7 @@ class YandexSource:
         if settings.yandex_maps_api_key is None:
             raise ConfigurationError("Не задан ключ API Яндекс Карт")
         if not settings.yandex_storage_allowed:
-            raise ConfigurationError(
-                "Хранение данных Яндекс Карт не разрешено текущей лицензией"
-            )
+            raise ConfigurationError("Хранение данных Яндекс Карт не разрешено текущей лицензией")
         self._key = settings.yandex_maps_api_key.get_secret_value()
         self._http = ResilientHttpClient(
             httpx.AsyncClient(timeout=30),

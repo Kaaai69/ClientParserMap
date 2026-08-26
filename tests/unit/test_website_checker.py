@@ -88,9 +88,7 @@ async def test_body_limit_is_enforced_while_streaming() -> None:
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
 
-    result = await WebsiteFetcher(client, policy(), max_html_bytes=100).fetch(
-        "https://large.test"
-    )
+    result = await WebsiteFetcher(client, policy(), max_html_bytes=100).fetch("https://large.test")
 
     assert result.status is WebsiteStatus.ERROR
     assert result.error_code == "RESPONSE_TOO_LARGE"

@@ -75,10 +75,7 @@ class GoogleSheetsClient:
             fields="sheets.properties.title",
         )
         metadata = await _execute(metadata_request)
-        titles = {
-            sheet.get("properties", {}).get("title")
-            for sheet in metadata.get("sheets", [])
-        }
+        titles = {sheet.get("properties", {}).get("title") for sheet in metadata.get("sheets", [])}
         if name not in titles:
             add_request = self._service.spreadsheets().batchUpdate(
                 spreadsheetId=self._spreadsheet_id,
@@ -87,26 +84,38 @@ class GoogleSheetsClient:
             await _execute(add_request)
 
         header_range = f"{_quote_title(name)}!A1:{_column_name(len(headers))}1"
-        read_request = self._service.spreadsheets().values().get(
-            spreadsheetId=self._spreadsheet_id,
-            range=header_range,
+        read_request = (
+            self._service.spreadsheets()
+            .values()
+            .get(
+                spreadsheetId=self._spreadsheet_id,
+                range=header_range,
+            )
         )
         current = await _execute(read_request)
         rows = current.get("values", [])
         current_headers = tuple(str(value) for value in rows[0]) if rows else ()
         if current_headers != tuple(headers):
-            update_request = self._service.spreadsheets().values().update(
-                spreadsheetId=self._spreadsheet_id,
-                range=header_range,
-                valueInputOption="RAW",
-                body={"values": [list(headers)]},
+            update_request = (
+                self._service.spreadsheets()
+                .values()
+                .update(
+                    spreadsheetId=self._spreadsheet_id,
+                    range=header_range,
+                    valueInputOption="RAW",
+                    body={"values": [list(headers)]},
+                )
             )
             await _execute(update_request)
 
     async def read_records(self, name: str) -> list[SheetRow]:
-        request = self._service.spreadsheets().values().get(
-            spreadsheetId=self._spreadsheet_id,
-            range=_quote_title(name),
+        request = (
+            self._service.spreadsheets()
+            .values()
+            .get(
+                spreadsheetId=self._spreadsheet_id,
+                range=_quote_title(name),
+            )
         )
         payload = await _execute(request)
         rows = payload.get("values", [])
@@ -128,12 +137,16 @@ class GoogleSheetsClient:
         headers: Sequence[str],
         values: dict[str, str],
     ) -> int:
-        request = self._service.spreadsheets().values().append(
-            spreadsheetId=self._spreadsheet_id,
-            range=f"{_quote_title(name)}!A:A",
-            valueInputOption="RAW",
-            insertDataOption="INSERT_ROWS",
-            body={"values": [[values.get(header, "") for header in headers]]},
+        request = (
+            self._service.spreadsheets()
+            .values()
+            .append(
+                spreadsheetId=self._spreadsheet_id,
+                range=f"{_quote_title(name)}!A:A",
+                valueInputOption="RAW",
+                insertDataOption="INSERT_ROWS",
+                body={"values": [[values.get(header, "") for header in headers]]},
+            )
         )
         payload = await _execute(request)
         updated_range = str(payload.get("updates", {}).get("updatedRange", ""))
@@ -149,15 +162,16 @@ class GoogleSheetsClient:
         headers: Sequence[str],
         values: dict[str, str],
     ) -> None:
-        row_range = (
-            f"{_quote_title(name)}!A{row_number}:"
-            f"{_column_name(len(headers))}{row_number}"
-        )
-        request = self._service.spreadsheets().values().update(
-            spreadsheetId=self._spreadsheet_id,
-            range=row_range,
-            valueInputOption="RAW",
-            body={"values": [[values.get(header, "") for header in headers]]},
+        row_range = f"{_quote_title(name)}!A{row_number}:{_column_name(len(headers))}{row_number}"
+        request = (
+            self._service.spreadsheets()
+            .values()
+            .update(
+                spreadsheetId=self._spreadsheet_id,
+                range=row_range,
+                valueInputOption="RAW",
+                body={"values": [[values.get(header, "") for header in headers]]},
+            )
         )
         await _execute(request)
 

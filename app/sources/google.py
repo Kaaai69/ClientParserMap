@@ -87,9 +87,7 @@ class GoogleSource:
         international_phone = _optional_text(place.get("internationalPhoneNumber"))
         national_phone = _optional_text(place.get("nationalPhoneNumber"))
         phones = tuple(
-            phone
-            for phone in (international_phone, national_phone)
-            if phone is not None
+            phone for phone in (international_phone, national_phone) if phone is not None
         )
         categories = [str(value) for value in place.get("types", []) if value]
         primary_type_text = _optional_text(primary_type.get("text"))

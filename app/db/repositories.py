@@ -213,7 +213,9 @@ class CompanyRepository:
 
     async def get_detail(self, company_id: int) -> Company | None:
         result = await self.session.scalar(
-            select(Company).where(Company.id == company_id).options(
+            select(Company)
+            .where(Company.id == company_id)
+            .options(
                 selectinload(Company.sources),
                 selectinload(Company.contacts).selectinload(CompanyContact.sources),
                 selectinload(Company.website_checks),

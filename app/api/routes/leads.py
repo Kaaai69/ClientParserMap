@@ -41,15 +41,10 @@ async def list_leads(
         filters.append(Company.lead_state == lead_state)
     if source is not None:
         filters.append(
-            Company.id.in_(
-                select(CompanySource.company_id).where(CompanySource.source == source)
-            )
+            Company.id.in_(select(CompanySource.company_id).where(CompanySource.source == source))
         )
     total = int(
-        await session.scalar(
-            select(func.count()).select_from(Company).where(*filters)
-        )
-        or 0
+        await session.scalar(select(func.count()).select_from(Company).where(*filters)) or 0
     )
     companies = list(
         (

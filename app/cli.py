@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict
 from app.core.config import Settings, get_settings
 from app.core.enums import JobStatus, SourceName
 from app.core.errors import ConfigurationError
+from app.core.logging import configure_logging
 from app.db.repositories import SearchJobRepository
 from app.db.session import Database
 from app.jobs.outbox import OutboxDispatcher, RQSearchQueue
@@ -85,6 +86,7 @@ async def execute_search(
     settings: Settings | None = None,
 ) -> CliSearchResult:
     resolved_settings = settings or get_settings()
+    configure_logging(resolved_settings.log_level)
     enabled = set(resolved_settings.enabled_sources)
     selected = sources or resolved_settings.enabled_sources
     if not selected:

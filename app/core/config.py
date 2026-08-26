@@ -20,7 +20,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     api_auth_key: SecretStr | None = None
 
-    database_url: str = "postgresql+asyncpg://client_parser:client_parser@localhost:5432/client_parser"
+    database_url: str = (
+        "postgresql+asyncpg://client_parser:client_parser@localhost:5432/client_parser"
+    )
     redis_url: str = "redis://localhost:6379/0"
     rq_queue_name: str = "searches"
     rq_job_timeout_seconds: int = Field(default=7200, ge=60)

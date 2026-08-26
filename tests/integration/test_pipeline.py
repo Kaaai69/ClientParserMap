@@ -143,9 +143,7 @@ async def test_pipeline_deduplicates_analyzes_scores_and_exports_once() -> None:
             rating=4.9,
             reviews_count=137,
         )
-        two_gis = google.model_copy(
-            update={"source": SourceName.TWO_GIS, "source_id": "2gis-1"}
-        )
+        two_gis = google.model_copy(update={"source": SourceName.TWO_GIS, "source_id": "2gis-1"})
         sources = {
             SourceName.GOOGLE: OnePageSource(SourceName.GOOGLE, google),
             SourceName.TWO_GIS: OnePageSource(SourceName.TWO_GIS, two_gis),
@@ -168,9 +166,7 @@ async def test_pipeline_deduplicates_analyzes_scores_and_exports_once() -> None:
         async with session_factory() as session:
             stored_job = await session.get(SearchJob, job_id)
             stored_company = await session.scalar(select(Company))
-            export_count = await session.scalar(
-                select(func.count()).select_from(SheetExport)
-            )
+            export_count = await session.scalar(select(func.count()).select_from(SheetExport))
             assert stored_job is not None
             assert stored_company is not None
             assert stored_job.status is JobStatus.COMPLETED

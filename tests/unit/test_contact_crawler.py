@@ -43,9 +43,7 @@ def page(url: str, html: str) -> WebsiteFetchResult:
 
 async def test_crawler_stays_same_origin_and_caps_pages() -> None:
     home_url = "https://example.ru/"
-    links = "".join(
-        f'<a href="/contact-{number}">Контакты {number}</a>' for number in range(10)
-    )
+    links = "".join(f'<a href="/contact-{number}">Контакты {number}</a>' for number in range(10))
     pages = {
         "https://example.ru/robots.txt": page(
             "https://example.ru/robots.txt", "User-agent: *\nAllow: /"
@@ -81,9 +79,7 @@ async def test_crawler_respects_robots_txt() -> None:
                 "https://example.ru/robots.txt",
                 "User-agent: *\nDisallow: /contacts",
             ),
-            "https://example.ru/about": page(
-                "https://example.ru/about", "Почта sales@example.ru"
-            ),
+            "https://example.ru/about": page("https://example.ru/about", "Почта sales@example.ru"),
         }
     )
 

@@ -16,5 +16,6 @@ docs
 server.txt
 credentials*.json
 service-account*.json
+credentials
 *.pyc
 *.log
