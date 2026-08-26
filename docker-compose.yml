@@ -67,7 +67,7 @@ services:
 
   migrate:
     <<: *app
-    command: ["uv", "run", "alembic", "upgrade", "head"]
+    command: ["uv", "run", "--no-sync", "alembic", "upgrade", "head"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -75,7 +75,7 @@ services:
 
   api:
     <<: *app
-    command: ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    command: ["uv", "run", "--no-sync", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -98,7 +98,7 @@ services:
 
   worker:
     <<: *app
-    command: ["uv", "run", "python", "-m", "app.worker"]
+    command: ["uv", "run", "--no-sync", "python", "-m", "app.worker"]
     depends_on:
       migrate:
         condition: service_completed_successfully
