@@ -1,0 +1,20 @@
+[website]
+no_website = 100
+dead_or_timeout = 95
+parked = 95
+placeholder = 90
+business_card = 80
+tilda_wix_nethouse = 40
+flexbe_creatium_lpmotor = 30
+
+[business]
+rating_threshold = 4.7
+rating_weight = 5
+review_thresholds = [20, 50, 100]
+review_weight = 5
+
+[contact]
+phone = 100
+whatsapp_or_telegram = 90
+email = 70
+social_or_other = 50
