@@ -1,0 +1,32 @@
+{
+  "meta": {"api_version": "3.0", "code": 200},
+  "result": {
+    "total": 51,
+    "items": [
+      {
+        "id": "70000001000000001",
+        "name": "Nyra Auto",
+        "type": "branch",
+        "address_name": "Тверская улица, 10",
+        "rubrics": [{"id": "1", "name": "Детейлинг", "kind": "goods"}],
+        "point": {"lat": 55.75, "lon": 37.61},
+        "reviews": {"rating": 4.9, "review_count": 137},
+        "schedule": {"Mon": {"working_hours": [{"from": "09:00", "to": "18:00"}]}},
+        "contact_groups": [
+          {
+            "name": "Основные контакты",
+            "contacts": [
+              {"type": "phone", "value": "+7 999 123-45-67", "text": "+7 999 123-45-67"},
+              {"type": "website", "url": "https://nyra-auto.example/", "value": "nyra-auto.example"},
+              {"type": "email", "value": "sales@nyra-auto.example"},
+              {"type": "telegram", "url": "https://t.me/nyra_auto", "value": "nyra_auto"},
+              {"type": "whatsapp", "url": "https://wa.me/79991234567", "value": "+79991234567"},
+              {"type": "vkontakte", "url": "https://vk.com/nyra_auto", "value": "nyra_auto"},
+              {"type": "instagram", "url": "https://instagram.com/nyra_auto", "value": "nyra_auto"}
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

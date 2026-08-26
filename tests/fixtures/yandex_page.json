@@ -1,0 +1,27 @@
+{
+  "type": "FeatureCollection",
+  "properties": {
+    "ResponseMetaData": {"SearchResponse": {"found": 51, "display": "1-1"}}
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "id": "yandex-1",
+      "geometry": {"type": "Point", "coordinates": [37.61, 55.75]},
+      "properties": {
+        "CompanyMetaData": {
+          "id": "yandex-1",
+          "name": "Nyra Auto",
+          "address": "Москва, Тверская улица, 10",
+          "url": "https://nyra-auto.example/",
+          "Categories": [{"id": "1", "name": "Детейлинг", "class": "auto"}],
+          "Phones": [
+            {"type": "phone", "formatted": "+7 999 123-45-67", "country": "7", "prefix": "999", "number": "1234567"}
+          ],
+          "Hours": {"text": "пн-пт 09:00–18:00", "Availabilities": []},
+          "Rating": {"rating": 4.9, "reviews": 137, "ratings": 140}
+        }
+      }
+    }
+  ]
+}
