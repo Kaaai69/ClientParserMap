@@ -656,3 +656,4 @@ The MVP is accepted when:
 8. Yandex remains disabled without the explicit licensing flag.
 9. Automated quality, test, migration, Compose, and image-build checks pass.
 10. Live third-party correctness is not claimed until the operator supplies valid keys and runs the documented smoke checks.
+11. The verified image is deployed on the operator's server with PostgreSQL/Redis volumes, migrations, restart policies, secret-only server configuration, and health checks; until a TLS reverse proxy is explicitly configured, the API binds to loopback and is reached through an SSH tunnel.

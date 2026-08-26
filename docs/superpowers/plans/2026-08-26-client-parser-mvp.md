@@ -919,3 +919,45 @@ If `origin` already exists, verify it is exactly `https://github.com/Kaaai69/Cli
 Run: `gh repo view Kaaai69/ClientParserMap --json url,visibility,defaultBranchRef && gh api repos/Kaaai69/ClientParserMap/commits/main --jq '.sha'`
 
 Expected: repository remains private, default branch is `main`, and remote SHA equals local `git rev-parse HEAD`.
+
+### Task 14: Secure Server Deployment
+
+**Files:**
+- Create on server: `/opt/client-parser-map/.env`
+- Create on server: `/opt/client-parser-map/compose.production.yml`
+- Create on server: `/opt/client-parser-map/credentials/` only when Sheets credentials are later supplied
+- Test: remote Docker Compose state and HTTP health endpoints
+
+**Interfaces:**
+- Consumes: verified `main` from `Kaaai69/ClientParserMap`, the operator-provided VPN/SSH access, and server-only secrets.
+- Produces: a restart-safe remote deployment with persistent PostgreSQL/Redis state and a loopback-only API until TLS ingress is configured.
+
+- [ ] **Step 1: Inspect the target host read-only**
+
+Connect using the existing operator credentials without printing them. Record OS, free disk/memory, Docker/Compose versions, active listeners, firewall, and existing reverse-proxy/container names. Do not install packages or stop services during inspection.
+
+- [ ] **Step 2: Prepare isolated server paths and secrets**
+
+Create `/opt/client-parser-map`, clone the private repository through the already authorized mechanism, and create a mode-`0600` `.env` containing generated database credentials and `API_AUTH_KEY`. Keep source API keys and Sheets credentials empty until supplied. Never copy `vpn.conf`, `server.txt`, GitHub tokens, or private SSH material into the repository or image.
+
+- [ ] **Step 3: Start production Compose without exposing an unauthenticated public port**
+
+Use a production override with restart policies, named volumes, resource-aware worker settings, and API publication `127.0.0.1:8000:8000`. Run migrations first, then start API and worker. Do not change an existing reverse proxy or firewall unless its exact ownership and collision-free route are verified.
+
+- [ ] **Step 4: Verify persistence, health, and restart behavior**
+
+Run remote checks equivalent to:
+
+```bash
+docker compose -f docker-compose.yml -f compose.production.yml ps
+curl --fail http://127.0.0.1:8000/health/live
+curl --fail http://127.0.0.1:8000/health/ready
+docker compose -f docker-compose.yml -f compose.production.yml restart api worker
+curl --retry 20 --retry-delay 2 --fail http://127.0.0.1:8000/health/ready
+```
+
+Expected: PostgreSQL, Redis, API, and worker return to healthy/running state; migrations are at head; volumes remain attached; logs contain no credentials.
+
+- [ ] **Step 5: Deliver the access and activation runbook**
+
+Document the SSH-tunnel command for local API access, remote Compose update/rollback commands, backup path/command, and exact fields the operator must later add for Google/2GIS and Google Sheets. State explicitly that live searching/export remains disabled until those third-party credentials are supplied.
