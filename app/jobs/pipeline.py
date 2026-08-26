@@ -1,7 +1,7 @@
 import asyncio
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
 import httpx
@@ -45,7 +45,7 @@ from app.sources.base import LeadSource
 from app.website_analyzer.checker import WebsiteFetcher, WebsiteFetchResult
 from app.website_analyzer.cms_detector import CmsDetection, detect_cms
 from app.website_analyzer.contacts import ContactCrawler
-from app.website_analyzer.security import SafeUrlPolicy
+from app.website_analyzer.security import PinnedAsyncHTTPTransport, SafeUrlPolicy
 from app.website_analyzer.website_type import WebsiteClassification, classify_website
 
 TERMINAL_JOB_STATUSES = {
@@ -75,16 +75,18 @@ class DefaultCompanyAnalyzer:
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "DefaultCompanyAnalyzer":
+        limits = httpx.Limits(
+            max_connections=settings.max_concurrent_website_checks,
+            max_keepalive_connections=settings.max_concurrent_website_checks,
+        )
+        policy = SafeUrlPolicy()
         client = httpx.AsyncClient(
             timeout=httpx.Timeout(settings.website_timeout_seconds),
-            limits=httpx.Limits(
-                max_connections=settings.max_concurrent_website_checks,
-                max_keepalive_connections=settings.max_concurrent_website_checks,
-            ),
+            transport=PinnedAsyncHTTPTransport(policy, limits=limits),
         )
         fetcher = WebsiteFetcher(
             client,
-            SafeUrlPolicy(),
+            policy,
             max_redirects=settings.max_website_redirects,
             max_html_bytes=settings.max_html_bytes,
         )
@@ -277,6 +279,13 @@ class SearchPipeline:
             if link.processing_stage
             in {JobStage.COLLECTING, JobStage.DEDUPLICATING, JobStage.ANALYZING_WEBSITES}
         ]
+        uncached: list[SearchJobCompany] = []
+        for link in pending:
+            if self._has_fresh_website_check(link.company):
+                link.processing_stage = JobStage.SCORING
+                job.analyzed_count += 1
+            else:
+                uncached.append(link)
         semaphore = asyncio.Semaphore(self._settings.max_concurrent_website_checks)
 
         async def analyze_one(
@@ -288,7 +297,7 @@ class SearchPipeline:
                 except Exception as error:
                     return link, error
 
-        results = await asyncio.gather(*(analyze_one(link) for link in pending))
+        results = await asyncio.gather(*(analyze_one(link) for link in uncached))
         for link, result in results:
             company = link.company
             if isinstance(result, Exception):
@@ -300,6 +309,15 @@ class SearchPipeline:
             link.processing_stage = JobStage.SCORING
             job.analyzed_count += 1
         await session.commit()
+
+    def _has_fresh_website_check(self, company: Company) -> bool:
+        if not company.website_checks:
+            return False
+        latest_checked_at = max(item.checked_at for item in company.website_checks)
+        if latest_checked_at.tzinfo is None:
+            latest_checked_at = latest_checked_at.replace(tzinfo=UTC)
+        cutoff = datetime.now(UTC) - timedelta(hours=self._settings.website_check_ttl_hours)
+        return latest_checked_at >= cutoff
 
     async def _store_analysis(
         self,
@@ -479,6 +497,7 @@ class SearchPipeline:
                     .options(
                         selectinload(SearchJobCompany.company).selectinload(Company.sources),
                         selectinload(SearchJobCompany.company).selectinload(Company.contacts),
+                        selectinload(SearchJobCompany.company).selectinload(Company.website_checks),
                     )
                     .execution_options(populate_existing=True)
                 )

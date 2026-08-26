@@ -103,6 +103,7 @@ class SheetsExporter:
         self._all_companies_name = settings.google_sheets_all_companies_worksheet
         self._qualified_name = settings.google_sheets_qualified_leads_worksheet
         self._runs_name = settings.google_sheets_search_runs_worksheet
+        self._indexes: dict[str, dict[str, SheetRow]] = {}
 
     async def sync_company(
         self,
@@ -153,15 +154,12 @@ class SheetsExporter:
         entity_id: int,
         manual_columns: frozenset[str] = frozenset(),
     ) -> SheetWriteResult:
-        await self._client.ensure_worksheet(worksheet_name, headers)
-        rows = await self._client.read_records(worksheet_name)
+        index = await self._worksheet_index(worksheet_name, headers, id_column)
         id_value = values[id_column]
-        existing = next(
-            (row for row in rows if row.values.get(id_column) == id_value),
-            None,
-        )
+        existing = index.get(id_value)
         if existing is None:
             row_number = await self._client.append_row(worksheet_name, headers, values)
+            index[id_value] = SheetRow(row_number=row_number, values=dict(values))
             return SheetWriteResult(
                 worksheet_name,
                 entity_type,
@@ -169,9 +167,15 @@ class SheetsExporter:
                 row_number,
                 created=True,
             )
-
+        if manual_columns:
+            existing = await self._client.read_row(
+                worksheet_name,
+                existing.row_number,
+                headers,
+            )
         merged = _preserve_manual_values(values, existing, manual_columns)
         await self._client.update_row(worksheet_name, existing.row_number, headers, merged)
+        index[id_value] = SheetRow(row_number=existing.row_number, values=dict(merged))
         return SheetWriteResult(
             worksheet_name,
             entity_type,
@@ -179,6 +183,21 @@ class SheetsExporter:
             existing.row_number,
             created=False,
         )
+
+    async def _worksheet_index(
+        self,
+        worksheet_name: str,
+        headers: Sequence[str],
+        id_column: str,
+    ) -> dict[str, SheetRow]:
+        existing_index = self._indexes.get(worksheet_name)
+        if existing_index is not None:
+            return existing_index
+        await self._client.ensure_worksheet(worksheet_name, headers)
+        rows = await self._client.read_records(worksheet_name)
+        index = {row.values[id_column]: row for row in rows if row.values.get(id_column)}
+        self._indexes[worksheet_name] = index
+        return index
 
 
 def _all_company_values(company: CompanySheetRecord) -> dict[str, str]:

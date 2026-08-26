@@ -107,11 +107,15 @@ async def execute_search(
             job = await SearchJobRepository(session).create_with_outbox(criteria, tuple(selected))
             await session.commit()
             job_id = job.id
-        await OutboxDispatcher(
+        published = await OutboxDispatcher(
             database.session_factory,
             queue,
             job_timeout_seconds=resolved_settings.rq_job_timeout_seconds,
         ).dispatch_pending()
+        if published == 0:
+            raise ConfigurationError(
+                "Не удалось поставить поиск в очередь Redis; запись сохранена для повтора"
+            )
         if no_wait:
             return CliSearchResult(job_id=job_id, status=JobStatus.PENDING.value)
         while True:

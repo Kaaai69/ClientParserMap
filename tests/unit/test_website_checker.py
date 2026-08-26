@@ -146,3 +146,28 @@ async def test_terminal_server_errors_are_retried_then_dead() -> None:
     assert result.status is WebsiteStatus.DEAD
     assert result.error_code == "TERMINAL_SERVER_ERROR"
     assert requests == 2
+
+
+async def test_rate_limit_is_retried_then_succeeds() -> None:
+    requests = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal requests
+        requests += 1
+        if requests == 1:
+            return httpx.Response(429, headers={"Retry-After": "0"}, request=request)
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "text/html"},
+            text="<html>Компания</html>",
+            request=request,
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+    result = await WebsiteFetcher(client, policy(), server_error_attempts=2).fetch(
+        "https://limited.test"
+    )
+
+    assert result.status is WebsiteStatus.ONLINE
+    assert requests == 2

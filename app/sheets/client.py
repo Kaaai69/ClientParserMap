@@ -24,6 +24,13 @@ class SheetsClient(Protocol):
 
     async def read_records(self, name: str) -> list[SheetRow]: ...
 
+    async def read_row(
+        self,
+        name: str,
+        row_number: int,
+        headers: Sequence[str],
+    ) -> SheetRow: ...
+
     async def append_row(
         self,
         name: str,
@@ -130,6 +137,30 @@ class GoogleSheetsClient:
             }
             records.append(SheetRow(row_number=row_number, values=values))
         return records
+
+    async def read_row(
+        self,
+        name: str,
+        row_number: int,
+        headers: Sequence[str],
+    ) -> SheetRow:
+        row_range = f"{_quote_title(name)}!A{row_number}:{_column_name(len(headers))}{row_number}"
+        request = (
+            self._service.spreadsheets()
+            .values()
+            .get(
+                spreadsheetId=self._spreadsheet_id,
+                range=row_range,
+            )
+        )
+        payload = await _execute(request)
+        rows = payload.get("values", [])
+        raw_row = rows[0] if rows else []
+        values = {
+            header: str(raw_row[index]) if index < len(raw_row) else ""
+            for index, header in enumerate(headers)
+        }
+        return SheetRow(row_number=row_number, values=values)
 
     async def append_row(
         self,

@@ -21,16 +21,29 @@ class InMemorySheetsClient:
     def __init__(self) -> None:
         self.headers: dict[str, tuple[str, ...]] = {}
         self.data: dict[str, list[dict[str, str]]] = {}
+        self.read_counts: dict[str, int] = {}
 
     async def ensure_worksheet(self, name: str, headers: Sequence[str]) -> None:
         self.headers[name] = tuple(headers)
         self.data.setdefault(name, [])
 
     async def read_records(self, name: str) -> list[SheetRow]:
+        self.read_counts[name] = self.read_counts.get(name, 0) + 1
         return [
             SheetRow(row_number=index + 2, values=dict(values))
             for index, values in enumerate(self.data.get(name, []))
         ]
+
+    async def read_row(
+        self,
+        name: str,
+        row_number: int,
+        headers: Sequence[str],
+    ) -> SheetRow:
+        return SheetRow(
+            row_number=row_number,
+            values=dict(self.data[name][row_number - 2]),
+        )
 
     async def append_row(
         self,
@@ -170,3 +183,34 @@ async def test_job_row_is_idempotently_updated() -> None:
     assert len(client.rows("Запуски поиска")) == 1
     assert client.rows("Запуски поиска")[0]["Статус запуска"] == "COMPLETED"
     assert client.rows("Запуски поиска")[0]["Всего найдено"] == "10"
+
+
+async def test_exporter_builds_each_worksheet_index_once() -> None:
+    client = InMemorySheetsClient()
+    exporter = SheetsExporter(client, settings())
+
+    await exporter.sync_company(company(qualified=True))
+    await exporter.sync_company(
+        company(qualified=True, name="Second").model_copy(update={"id": 43})
+    )
+
+    assert client.read_counts["Все компании"] == 1
+    assert client.read_counts["Готовые лиды"] == 1
+
+
+async def test_no_contacts_company_never_enters_qualified_sheet() -> None:
+    client = InMemorySheetsClient()
+    record = company(qualified=True).model_copy(
+        update={
+            "contacts_found": False,
+            "contactability_score": 0,
+            "preferred_contact_type": None,
+            "preferred_contact_value": None,
+            "lead_state": LeadState.NO_CONTACTS,
+        }
+    )
+
+    await SheetsExporter(client, settings()).sync_company(record)
+
+    assert len(client.rows("Все компании")) == 1
+    assert client.rows("Готовые лиды") == []

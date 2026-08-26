@@ -4,6 +4,7 @@ FROM python:3.12-slim AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH="/app" \
     PATH="/app/.venv/bin:$PATH"
 
 COPY --from=uv /uv /uvx /bin/

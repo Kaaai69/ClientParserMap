@@ -1,3 +1,4 @@
+import asyncio
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -159,18 +160,21 @@ class WebsiteFetcher:
                         redirects,
                     )
 
-                if response.status_code >= 500:
+                if response.status_code == 429 or response.status_code >= 500:
                     server_error_count += 1
                     if server_error_count < self._server_error_attempts:
                         visited.discard(current_url)
+                        if response.status_code == 429:
+                            await asyncio.sleep(_retry_after_seconds(response))
                         continue
+                    is_rate_limited = response.status_code == 429
                     return self._response_failure(
                         requested_url,
                         current_url,
                         response,
-                        WebsiteStatus.DEAD,
+                        WebsiteStatus.ERROR if is_rate_limited else WebsiteStatus.DEAD,
                         started,
-                        "TERMINAL_SERVER_ERROR",
+                        "RATE_LIMIT_EXHAUSTED" if is_rate_limited else "TERMINAL_SERVER_ERROR",
                         redirects,
                     )
 
@@ -302,3 +306,13 @@ class WebsiteFetcher:
 
 def _elapsed_ms(started: float) -> int:
     return max(0, round((time.monotonic() - started) * 1000))
+
+
+def _retry_after_seconds(response: httpx.Response) -> float:
+    raw_value = response.headers.get("Retry-After")
+    if raw_value is None:
+        return 1.0
+    try:
+        return min(30.0, max(0.0, float(raw_value)))
+    except ValueError:
+        return 1.0

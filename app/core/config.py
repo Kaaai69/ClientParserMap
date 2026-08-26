@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Self
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.enums import SourceName
@@ -53,6 +53,13 @@ class Settings(BaseSettings):
     google_requests_per_second: float = Field(default=5.0, gt=0, le=100)
     two_gis_requests_per_second: float = Field(default=5.0, gt=0, le=100)
     yandex_requests_per_second: float = Field(default=1.0, gt=0, le=100)
+
+    @field_validator("google_service_account_file", mode="before")
+    @classmethod
+    def empty_credential_path_is_unset(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @model_validator(mode="after")
     def normalize_optional_strings(self) -> Self:

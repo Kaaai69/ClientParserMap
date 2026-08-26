@@ -91,6 +91,17 @@ class InMemorySheets:
             for index, values in enumerate(self.data.get(name, []))
         ]
 
+    async def read_row(
+        self,
+        name: str,
+        row_number: int,
+        headers: Sequence[str],
+    ) -> SheetRow:
+        return SheetRow(
+            row_number=row_number,
+            values=dict(self.data[name][row_number - 2]),
+        )
+
     async def append_row(
         self,
         name: str,
@@ -164,6 +175,15 @@ async def test_pipeline_deduplicates_analyzes_scores_and_exports_once() -> None:
         await pipeline.run(job_id)
 
         async with session_factory() as session:
+            cached_job = await SearchJobRepository(session).create_with_outbox(
+                criteria,
+                (SourceName.GOOGLE, SourceName.TWO_GIS),
+            )
+            await session.commit()
+            cached_job_id = cached_job.id
+        await pipeline.run(cached_job_id)
+
+        async with session_factory() as session:
             stored_job = await session.get(SearchJob, job_id)
             stored_company = await session.scalar(select(Company))
             export_count = await session.scalar(select(func.count()).select_from(SheetExport))
@@ -174,9 +194,9 @@ async def test_pipeline_deduplicates_analyzes_scores_and_exports_once() -> None:
             assert stored_job.unique_count == 1
             assert stored_company.lead_state is LeadState.QUALIFIED
             assert stored_company.preferred_contact_value == "sales@example.ru"
-            assert export_count == 3
+            assert export_count == 4
 
         assert analyzer.calls == 1
         assert len(sheets.rows("Все компании")) == 1
         assert len(sheets.rows("Готовые лиды")) == 1
-        assert len(sheets.rows("Запуски поиска")) == 1
+        assert len(sheets.rows("Запуски поиска")) == 2

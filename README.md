@@ -118,8 +118,8 @@ docker compose exec api uv run python -m app.cli search \
 Smoke-тест не вызывает каталоги, сайты или Google Sheets. Он дважды обрабатывает фиксированные записи Google/2GIS и проверяет объединение в одну компанию:
 
 ```bash
-docker compose run --rm api uv run python scripts/fixture_smoke.py
-docker compose run --rm api uv run python scripts/fixture_smoke.py
+docker compose run --rm api uv run python -m scripts.fixture_smoke
+docker compose run --rm api uv run python -m scripts.fixture_smoke
 ```
 
 Во втором JSON-ответе должно быть `"company_count": 1` и `"duplicate_count": 0`.
