@@ -31,7 +31,7 @@ find a company
 - Deployment: Docker and Docker Compose.
 - Configuration: environment variables and a separately editable scoring rules file.
 - No source API keys or Google Sheets credentials are currently available. Integrations will therefore be verified with contract fixtures; live API calls remain an operator smoke test.
-- Companies with a high site opportunity score but no contact are stored with `NO_CONTACTS` and are not exported to Google Sheets.
+- Companies with a high site opportunity score but no contact are stored with `NO_CONTACTS`, exported to `Все компании`, and excluded from `Готовые лиды`.
 - `max_results` is a global cap on unique companies for a search job, not a per-source cap.
 - The existing `server.txt` is not an application input and must be excluded from Git and Docker build context.
 
@@ -406,53 +406,126 @@ site score at/above threshold and no contact       NO_CONTACTS
 site score at/above threshold and contact exists   QUALIFIED
 ```
 
-Only `QUALIFIED` companies are eligible for Google Sheets export. `LEAD_SCORE_THRESHOLD` defaults to `50` and is environment-configurable.
+Every processed company is eligible for the `Все компании` Google Sheets worksheet. Only `QUALIFIED` companies are additionally eligible for the `Готовые лиды` worksheet. `LEAD_SCORE_THRESHOLD` defaults to `50` and is environment-configurable.
 
 ## 11. Google Sheets export
 
-Sheets is a delivery interface, never the primary datastore. If spreadsheet configuration is absent, search and storage still complete; export is skipped with a job warning.
+Sheets is a human-facing work interface, never the primary datastore. If spreadsheet configuration is absent, search and storage still complete; export is skipped with a job warning. The exporter creates and maintains three worksheets.
 
-The worksheet columns, in order, are:
+### 11.1 `Все компании`
+
+This worksheet contains every processed company, including records below the score threshold and companies without contacts. Columns, in order:
 
 ```text
 Дата обнаружения
+Дата обновления
 Название
-Ниша
+Поисковый запрос
+Категория
 Город
 Адрес
-Телефон
-Доп. телефоны
+Основной телефон
+Дополнительные телефоны
+WhatsApp
+Telegram
+Email
+VK
+Instagram
+Другие соцсети
+Сайт
+Основной источник
+Все источники
+Рейтинг
+Количество отзывов
+Статус сайта
+CMS / конструктор
+Тип сайта
+HTTPS
+Site Opportunity Score
+Contactability Score
+Контакты найдены
+Предпочтительный способ связи
+Предпочтительный контакт
+Причина оценки
+Статус лида
+ID компании
+```
+
+`Основной источник` contains the first discovery source and `Все источники` contains every confirming directory source. `ID компании` is the stable idempotency key and may be hidden, but must not be deleted.
+
+### 11.2 `Готовые лиды`
+
+This worksheet contains only `QUALIFIED` companies. Columns, in order:
+
+```text
+Дата добавления
+Название
+Категория
+Город
+Адрес
+Основной телефон
+Дополнительные телефоны
 WhatsApp
 Telegram
 Email
 VK
 Instagram
 Сайт
-Источник
 Источники
 Рейтинг
 Количество отзывов
 Статус сайта
-CMS
+CMS / конструктор
 HTTPS
 Site Opportunity Score
 Contactability Score
 Причина попадания
-Статус лида
+Предпочтительный способ связи
+Предпочтительный контакт
+Статус работы
 Менеджер
 Комментарий
-_company_id
+ID компании
 ```
 
-`Источник` contains the first discovery source and `Источники` contains every confirming directory source. The final service column `_company_id` provides stable idempotency.
+New rows receive `Статус работы=Новый`. The exporter never overwrites the manual columns `Статус работы`, `Менеджер`, and `Комментарий`. Suggested human-managed statuses are `Новый`, `В работе`, `Связались`, `Нет ответа`, `Не интересно`, `Квалифицирован`, and `Закрыто`.
+
+### 11.3 `Запуски поиска`
+
+This worksheet contains one idempotently updated row per search job. Columns, in order:
+
+```text
+Дата запуска
+Дата завершения
+Город
+Поисковый запрос
+Использованные источники
+Минимальный рейтинг
+Минимальное количество отзывов
+Лимит результатов
+Статус запуска
+Текущий этап
+Всего найдено
+Отфильтровано
+Уникальных компаний
+Проверено сайтов
+Потенциальных лидов
+Лидов с контактами
+Записано в Google Sheets
+Количество ошибок
+ID запуска
+```
+
+`ID запуска` is the stable idempotency key. The row is written when the job starts, refreshed after every stage, and finalized after export.
 
 Export behavior:
 
-1. Load the header and `_company_id` index.
-2. Append a new row only when that company ID is absent; set `Статус лида` to `Новый` and leave manager/comment empty.
-3. When the row exists, update machine-managed columns only.
-4. Never overwrite the three manual workflow columns.
-5. Record the successful append/update in `sheet_exports`.
+1. Create a missing worksheet and exact header row automatically.
+2. Load the appropriate `ID компании` or `ID запуска` index.
+3. Append a row only when its stable ID is absent.
+4. When the row exists, update machine-managed columns only.
+5. Never overwrite the three manual workflow columns in `Готовые лиды`.
+6. Record every successful append/update in `sheet_exports`, including worksheet and row identity.
 
 Service-account credentials are read from a mounted file. The target spreadsheet must be shared with the service-account email. The implementation uses the official Google client library rather than hand-written JWT signing.
 
@@ -495,7 +568,9 @@ TWO_GIS_API_KEY
 YANDEX_MAPS_API_KEY
 YANDEX_STORAGE_ALLOWED=false
 GOOGLE_SHEETS_SPREADSHEET_ID
-GOOGLE_SHEETS_WORKSHEET_NAME
+GOOGLE_SHEETS_ALL_COMPANIES_WORKSHEET=Все компании
+GOOGLE_SHEETS_QUALIFIED_LEADS_WORKSHEET=Готовые лиды
+GOOGLE_SHEETS_SEARCH_RUNS_WORKSHEET=Запуски поиска
 GOOGLE_SERVICE_ACCOUNT_FILE
 LEAD_SCORE_THRESHOLD=50
 WEBSITE_TIMEOUT_SECONDS=10
@@ -576,8 +651,8 @@ The MVP is accepted when:
 3. Source failures and bad websites are isolated and reflected in counters.
 4. Companies and contacts from multiple sources deduplicate without losing provenance.
 5. Website states, CMS/type, contacts, scores, and Russian reasons are persisted.
-6. Qualified contactable leads export idempotently while manual Sheet columns remain intact.
-7. High-opportunity companies without contacts remain queryable as `NO_CONTACTS` and are not exported.
+6. Every processed company appears idempotently in `Все компании`, each job appears in `Запуски поиска`, and qualified contactable leads additionally appear in `Готовые лиды` while manual workflow columns remain intact.
+7. High-opportunity companies without contacts remain queryable as `NO_CONTACTS`, appear in `Все компании`, and do not appear in `Готовые лиды`.
 8. Yandex remains disabled without the explicit licensing flag.
 9. Automated quality, test, migration, Compose, and image-build checks pass.
 10. Live third-party correctness is not claimed until the operator supplies valid keys and runs the documented smoke checks.
