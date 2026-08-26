@@ -42,6 +42,9 @@ class RQSearchQueue:
             job_timeout,
         )
 
+    async def ping(self) -> bool:
+        return bool(await asyncio.to_thread(self._queue.connection.ping))
+
     def _enqueue_sync(self, job_id: int, deterministic_id: str, timeout: int) -> None:
         if self._queue.fetch_job(deterministic_id) is not None:
             return
