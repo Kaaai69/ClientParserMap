@@ -13,6 +13,7 @@ htmlcov/
 *.py[cod]
 *.log
 *.sqlite3
+*.egg-info/
 credentials*.json
 service-account*.json
 server.txt

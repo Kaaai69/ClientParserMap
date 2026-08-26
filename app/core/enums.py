@@ -1,0 +1,75 @@
+from enum import StrEnum
+
+
+class SourceName(StrEnum):
+    GOOGLE = "google"
+    TWO_GIS = "2gis"
+    YANDEX = "yandex"
+
+
+class ContactsAccess(StrEnum):
+    FULL = "FULL"
+    LIMITED = "LIMITED"
+
+
+class ContactType(StrEnum):
+    PHONE = "PHONE"
+    EMAIL = "EMAIL"
+    WEBSITE = "WEBSITE"
+    TELEGRAM = "TELEGRAM"
+    WHATSAPP = "WHATSAPP"
+    VK = "VK"
+    INSTAGRAM = "INSTAGRAM"
+    OTHER = "OTHER"
+
+
+class WebsiteStatus(StrEnum):
+    NO_WEBSITE = "NO_WEBSITE"
+    ONLINE = "ONLINE"
+    DEAD = "DEAD"
+    TIMEOUT = "TIMEOUT"
+    PARKED = "PARKED"
+    PLACEHOLDER = "PLACEHOLDER"
+    ERROR = "ERROR"
+
+
+class WebsiteType(StrEnum):
+    BUSINESS_CARD = "BUSINESS_CARD"
+    NORMAL = "NORMAL"
+
+
+class CMS(StrEnum):
+    TILDA = "TILDA"
+    WIX = "WIX"
+    WORDPRESS = "WORDPRESS"
+    WEBFLOW = "WEBFLOW"
+    BITRIX = "BITRIX"
+    NETHOUSE = "NETHOUSE"
+    FLEXBE = "FLEXBE"
+    CREATIUM = "CREATIUM"
+    LPMOTOR = "LPMOTOR"
+    CUSTOM_OR_UNKNOWN = "CUSTOM_OR_UNKNOWN"
+
+
+class JobStatus(StrEnum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    COMPLETED_WITH_ERRORS = "COMPLETED_WITH_ERRORS"
+    FAILED = "FAILED"
+
+
+class JobStage(StrEnum):
+    PENDING = "PENDING"
+    COLLECTING = "COLLECTING"
+    DEDUPLICATING = "DEDUPLICATING"
+    ANALYZING_WEBSITES = "ANALYZING_WEBSITES"
+    SCORING = "SCORING"
+    EXPORTING = "EXPORTING"
+    FINISHED = "FINISHED"
+
+
+class LeadState(StrEnum):
+    QUALIFIED = "QUALIFIED"
+    BELOW_THRESHOLD = "BELOW_THRESHOLD"
+    NO_CONTACTS = "NO_CONTACTS"
