@@ -1,4 +1,5 @@
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from urllib.parse import urljoin, urlsplit
 
@@ -52,12 +53,14 @@ class WebsiteFetcher:
         self._max_redirects = max_redirects
         self._max_html_bytes = max_html_bytes
         self._server_error_attempts = server_error_attempts
-        self._headers = {
-            "Accept": "text/html,application/xhtml+xml",
-            "User-Agent": user_agent,
-        }
+        self._user_agent = user_agent
 
-    async def fetch(self, website_url: str | None) -> WebsiteFetchResult:
+    async def fetch(
+        self,
+        website_url: str | None,
+        *,
+        accepted_content_types: Sequence[str] = HTML_CONTENT_TYPES,
+    ) -> WebsiteFetchResult:
         if website_url is None or not website_url.strip():
             return WebsiteFetchResult(
                 requested_url=website_url,
@@ -95,7 +98,7 @@ class WebsiteFetcher:
                 )
             visited.add(current_url)
             try:
-                response = await self._send(current_url)
+                response = await self._send(current_url, accepted_content_types)
             except httpx.TimeoutException:
                 return self._failure(
                     requested_url,
@@ -183,7 +186,7 @@ class WebsiteFetcher:
                     )
 
                 content_type = response.headers.get("Content-Type", "").casefold()
-                if not content_type.startswith(HTML_CONTENT_TYPES):
+                if not content_type.startswith(tuple(accepted_content_types)):
                     return self._response_failure(
                         requested_url,
                         current_url,
@@ -223,8 +226,19 @@ class WebsiteFetcher:
     async def aclose(self) -> None:
         await self._client.aclose()
 
-    async def _send(self, url: str) -> httpx.Response:
-        request = self._client.build_request("GET", url, headers=self._headers)
+    async def _send(
+        self,
+        url: str,
+        accepted_content_types: Sequence[str],
+    ) -> httpx.Response:
+        request = self._client.build_request(
+            "GET",
+            url,
+            headers={
+                "Accept": ",".join(accepted_content_types),
+                "User-Agent": self._user_agent,
+            },
+        )
         return await self._client.send(request, stream=True, follow_redirects=False)
 
     async def _read_bounded(self, response: httpx.Response) -> bytes | None:
