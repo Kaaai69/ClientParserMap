@@ -94,7 +94,7 @@ class OutboxDispatcher:
                 try:
                     await self._queue.enqueue_search(
                         row.search_job_id,
-                        f"search:{row.search_job_id}",
+                        f"search-{row.search_job_id}",
                         self._job_timeout_seconds,
                     )
                 except Exception as error:

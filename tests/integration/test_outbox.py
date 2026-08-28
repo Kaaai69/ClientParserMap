@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator
 
+from rq.job import validate_job_id
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -24,6 +25,7 @@ class FlakyQueue:
     ) -> None:
         if not self.available:
             raise ConnectionError("redis unavailable")
+        validate_job_id(deterministic_id)
         self.job_ids.append(deterministic_id)
 
     def recover(self) -> None:
@@ -52,7 +54,7 @@ async def test_dispatcher_retries_unsent_row_after_redis_recovers() -> None:
         assert await dispatcher.dispatch_pending() == 0
         queue.recover()
         assert await dispatcher.dispatch_pending() == 1
-        assert queue.job_ids == [f"search:{job.id}"]
+        assert queue.job_ids == [f"search-{job.id}"]
 
         async with session_factory() as session:
             outbox = await session.scalar(select(JobOutbox))
