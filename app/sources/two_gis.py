@@ -4,11 +4,12 @@ import httpx
 
 from app.core.config import Settings
 from app.core.enums import ContactsAccess, SourceName
-from app.core.errors import ConfigurationError
+from app.core.errors import ConfigurationError, SourceRequestError
 from app.schemas.domain import SearchCriteria, SourceCompany, SourcePage
 from app.sources.http import ResilientHttpClient
 
 TWO_GIS_ITEMS_URL = "https://catalog.api.2gis.com/3.0/items"
+TWO_GIS_REGION_SEARCH_URL = "https://catalog.api.2gis.com/2.0/region/search"
 TWO_GIS_FIELDS = "items.point,items.rubrics,items.reviews,items.schedule,items.contact_groups"
 
 
@@ -19,6 +20,7 @@ class TwoGisSource:
         if settings.two_gis_api_key is None:
             raise ConfigurationError("Не задан ключ 2GIS")
         self._key = settings.two_gis_api_key.get_secret_value()
+        self._region_ids: dict[str, str] = {}
         self._http = ResilientHttpClient(
             httpx.AsyncClient(timeout=30),
             max_attempts=settings.source_max_retries,
@@ -32,11 +34,13 @@ class TwoGisSource:
         cursor: str | None,
     ) -> SourcePage:
         page_number = max(1, int(cursor or "1"))
+        region_id = await self._resolve_region_id(criteria.city)
         payload = await self._http.request_json(
             "GET",
             TWO_GIS_ITEMS_URL,
             params={
-                "q": f"{criteria.query} {criteria.city}",
+                "q": criteria.query,
+                "region_id": region_id,
                 "key": self._key,
                 "type": "branch",
                 "page": page_number,
@@ -44,17 +48,47 @@ class TwoGisSource:
                 "fields": TWO_GIS_FIELDS,
             },
         )
-        result = payload.get("result") or {}
-        raw_items = result.get("items", []) if isinstance(result, dict) else []
+        result = _api_result(payload)
+        raw_items = result.get("items", [])
         items = tuple(
             self._map_company(item, criteria.city)
             for item in raw_items
             if isinstance(item, dict) and item.get("id") and item.get("name")
         )
-        total = _optional_int(result.get("total")) if isinstance(result, dict) else None
+        total = _optional_int(result.get("total"))
         has_next = total is not None and page_number * 50 < total
         next_cursor = str(page_number + 1) if has_next else None
         return SourcePage(items=items, next_cursor=next_cursor, exhausted=not has_next)
+
+    async def _resolve_region_id(self, city: str) -> str:
+        cache_key = city.casefold()
+        if cached := self._region_ids.get(cache_key):
+            return cached
+        payload = await self._http.request_json(
+            "GET",
+            TWO_GIS_REGION_SEARCH_URL,
+            params={"q": city, "key": self._key},
+        )
+        result = _api_result(payload)
+        items = _region_entries(result)
+        matching = next(
+            (
+                region_id
+                for region_id, name in items
+                if name.casefold() == cache_key
+            ),
+            None,
+        )
+        if matching is None and items:
+            matching = items[0][0]
+        if matching is None:
+            raise SourceRequestError(
+                "SOURCE_REGION_NOT_FOUND",
+                "2GIS не нашёл указанный город",
+                retryable=False,
+            )
+        self._region_ids[cache_key] = matching
+        return matching
 
     async def aclose(self) -> None:
         await self._http.aclose()
@@ -119,6 +153,64 @@ def _group_contacts(raw_groups: object) -> dict[str, tuple[str, ...]]:
             if value not in bucket:
                 bucket.append(value)
     return {key: tuple(values) for key, values in collected.items()}
+
+
+def _api_result(payload: dict[str, Any]) -> dict[str, Any]:
+    meta = payload.get("meta")
+    code = _optional_int(meta.get("code")) if isinstance(meta, dict) else None
+    if code != 200:
+        if code is None:
+            raise SourceRequestError(
+                "SOURCE_INVALID_PAYLOAD",
+                "2GIS вернул ответ неожиданного формата",
+                retryable=False,
+            )
+        raise SourceRequestError(
+            f"SOURCE_API_{code}",
+            "2GIS отклонил запрос",
+            retryable=code in {429, 500, 502, 503, 504},
+        )
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        raise SourceRequestError(
+            "SOURCE_INVALID_PAYLOAD",
+            "2GIS вернул ответ неожиданного формата",
+            retryable=False,
+        )
+    return result
+
+
+def _region_entries(result: dict[str, Any]) -> list[tuple[str, str]]:
+    raw_items = result.get("items")
+    if not isinstance(raw_items, list):
+        raise SourceRequestError(
+            "SOURCE_INVALID_PAYLOAD",
+            "2GIS вернул ответ неожиданного формата",
+            retryable=False,
+        )
+    entries: list[tuple[str, str]] = []
+    for raw_item in raw_items:
+        if not isinstance(raw_item, dict):
+            raise SourceRequestError(
+                "SOURCE_INVALID_PAYLOAD",
+                "2GIS вернул ответ неожиданного формата",
+                retryable=False,
+            )
+        raw_id = raw_item.get("id")
+        raw_name = raw_item.get("name")
+        if (
+            not isinstance(raw_id, str)
+            or not raw_id.strip()
+            or not isinstance(raw_name, str)
+            or not raw_name.strip()
+        ):
+            raise SourceRequestError(
+                "SOURCE_INVALID_PAYLOAD",
+                "2GIS вернул ответ неожиданного формата",
+                retryable=False,
+            )
+        entries.append((raw_id.strip(), raw_name.strip()))
+    return entries
 
 
 def _optional_text(value: object) -> str | None:

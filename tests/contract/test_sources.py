@@ -42,12 +42,19 @@ async def test_two_gis_maps_contacts_and_next_page(
     respx_mock: MockRouter,
     fixture_json: Callable[[str], dict[str, Any]],
 ) -> None:
-    respx_mock.get("https://catalog.api.2gis.com/3.0/items").respond(
+    region_route = respx_mock.get("https://catalog.api.2gis.com/2.0/region/search").respond(
+        json={
+            "meta": {"code": 200},
+            "result": {"items": [{"id": "32", "name": "Москва", "type": "region"}]},
+        }
+    )
+    items_route = respx_mock.get("https://catalog.api.2gis.com/3.0/items").respond(
         json=fixture_json("two_gis_page.json")
     )
     source = TwoGisSource(Settings(_env_file=None, two_gis_api_key=SecretStr("2gis-key")))
 
     page = await source.search_page(criteria(), None)
+    await source.search_page(criteria(), "2")
 
     company = page.items[0]
     assert page.next_cursor == "2"
@@ -55,6 +62,10 @@ async def test_two_gis_maps_contacts_and_next_page(
     assert company.emails == ("sales@nyra-auto.example",)
     assert company.telegram == ("https://t.me/nyra_auto",)
     assert company.whatsapp == ("https://wa.me/79991234567",)
+    assert region_route.call_count == 1
+    assert region_route.calls[0].request.url.params["q"] == "Москва"
+    assert items_route.calls[0].request.url.params["q"] == "детейлинг"
+    assert items_route.calls[0].request.url.params["region_id"] == "32"
 
 
 async def test_two_gis_missing_contact_permission_is_limited(
@@ -63,12 +74,89 @@ async def test_two_gis_missing_contact_permission_is_limited(
 ) -> None:
     payload = fixture_json("two_gis_page.json")
     payload["result"]["items"][0].pop("contact_groups")
+    respx_mock.get("https://catalog.api.2gis.com/2.0/region/search").respond(
+        json={
+            "meta": {"code": 200},
+            "result": {"items": [{"id": "32", "name": "Москва", "type": "region"}]},
+        }
+    )
     respx_mock.get("https://catalog.api.2gis.com/3.0/items").respond(json=payload)
     source = TwoGisSource(Settings(_env_file=None, two_gis_api_key=SecretStr("2gis-key")))
 
     page = await source.search_page(criteria(), None)
 
     assert page.items[0].contacts_access is ContactsAccess.LIMITED
+
+
+@pytest.mark.parametrize(
+    ("code", "retryable"),
+    [(403, False), (429, True), (500, True)],
+)
+async def test_two_gis_rejects_error_code_inside_successful_http_response(
+    respx_mock: MockRouter,
+    code: int,
+    retryable: bool,
+) -> None:
+    respx_mock.get("https://catalog.api.2gis.com/2.0/region/search").respond(
+        json={
+            "meta": {"code": 200},
+            "result": {"items": [{"id": "32", "name": "Москва", "type": "region"}]},
+        }
+    )
+    respx_mock.get("https://catalog.api.2gis.com/3.0/items").respond(
+        json={"meta": {"code": code}, "result": {}}
+    )
+    source = TwoGisSource(Settings(_env_file=None, two_gis_api_key=SecretStr("2gis-key")))
+
+    with pytest.raises(SourceRequestError) as error:
+        await source.search_page(criteria(), None)
+
+    assert error.value.code == f"SOURCE_API_{code}"
+    assert error.value.retryable is retryable
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        {},
+        {"items": None},
+        {"items": {}},
+        {"items": [{}]},
+        {"items": [{"id": "   ", "name": "Москва"}]},
+        {"items": [{"id": True, "name": "Москва"}]},
+        {"items": [{"id": "32"}]},
+    ],
+)
+async def test_two_gis_rejects_malformed_region_payload(
+    respx_mock: MockRouter,
+    result: dict[str, Any],
+) -> None:
+    respx_mock.get("https://catalog.api.2gis.com/2.0/region/search").respond(
+        json={"meta": {"code": 200}, "result": result}
+    )
+    respx_mock.get("https://catalog.api.2gis.com/3.0/items").respond(
+        json={"meta": {"code": 200}, "result": {"items": [], "total": 0}}
+    )
+    source = TwoGisSource(Settings(_env_file=None, two_gis_api_key=SecretStr("2gis-key")))
+
+    with pytest.raises(SourceRequestError) as error:
+        await source.search_page(criteria(), None)
+
+    assert error.value.code == "SOURCE_INVALID_PAYLOAD"
+
+
+async def test_two_gis_reports_region_not_found_for_valid_empty_result(
+    respx_mock: MockRouter,
+) -> None:
+    respx_mock.get("https://catalog.api.2gis.com/2.0/region/search").respond(
+        json={"meta": {"code": 200}, "result": {"items": []}}
+    )
+    source = TwoGisSource(Settings(_env_file=None, two_gis_api_key=SecretStr("2gis-key")))
+
+    with pytest.raises(SourceRequestError) as error:
+        await source.search_page(criteria(), None)
+
+    assert error.value.code == "SOURCE_REGION_NOT_FOUND"
 
 
 async def test_yandex_maps_official_company_metadata(
