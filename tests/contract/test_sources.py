@@ -66,6 +66,7 @@ async def test_two_gis_maps_contacts_and_next_page(
     assert region_route.calls[0].request.url.params["q"] == "Москва"
     assert items_route.calls[0].request.url.params["q"] == "детейлинг"
     assert items_route.calls[0].request.url.params["region_id"] == "32"
+    assert items_route.calls[0].request.url.params["page_size"] == "10"
 
 
 async def test_two_gis_missing_contact_permission_is_limited(

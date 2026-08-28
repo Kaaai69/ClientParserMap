@@ -11,6 +11,7 @@ from app.sources.http import ResilientHttpClient
 TWO_GIS_ITEMS_URL = "https://catalog.api.2gis.com/3.0/items"
 TWO_GIS_REGION_SEARCH_URL = "https://catalog.api.2gis.com/2.0/region/search"
 TWO_GIS_FIELDS = "items.point,items.rubrics,items.reviews,items.schedule,items.contact_groups"
+TWO_GIS_PAGE_SIZE = 10
 
 
 class TwoGisSource:
@@ -44,7 +45,7 @@ class TwoGisSource:
                 "key": self._key,
                 "type": "branch",
                 "page": page_number,
-                "page_size": 50,
+                "page_size": TWO_GIS_PAGE_SIZE,
                 "fields": TWO_GIS_FIELDS,
             },
         )
@@ -56,7 +57,7 @@ class TwoGisSource:
             if isinstance(item, dict) and item.get("id") and item.get("name")
         )
         total = _optional_int(result.get("total"))
-        has_next = total is not None and page_number * 50 < total
+        has_next = total is not None and page_number * TWO_GIS_PAGE_SIZE < total
         next_cursor = str(page_number + 1) if has_next else None
         return SourcePage(items=items, next_cursor=next_cursor, exhausted=not has_next)
 
