@@ -1,0 +1,21 @@
+{
+  "places": [
+    {
+      "id": "ChIJ-test-google",
+      "displayName": {"text": "Nyra Auto", "languageCode": "ru"},
+      "types": ["car_repair", "establishment"],
+      "primaryTypeDisplayName": {"text": "Детейлинг"},
+      "formattedAddress": "Москва, Тверская улица, 10",
+      "internationalPhoneNumber": "+7 999 123-45-67",
+      "nationalPhoneNumber": "8 (999) 123-45-67",
+      "websiteUri": "https://nyra-auto.example/",
+      "rating": 4.9,
+      "userRatingCount": 137,
+      "location": {"latitude": 55.75, "longitude": 37.61},
+      "regularOpeningHours": {
+        "weekdayDescriptions": ["Monday: 9:00 AM – 6:00 PM"]
+      }
+    }
+  ],
+  "nextPageToken": "google-next"
+}

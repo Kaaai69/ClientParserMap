@@ -1,0 +1,125 @@
+x-app-environment: &app-environment
+  APP_ENV: ${APP_ENV:-production}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  API_AUTH_KEY: ${API_AUTH_KEY:-}
+  DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://client_parser:client_parser@postgres:5432/client_parser}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  RQ_QUEUE_NAME: ${RQ_QUEUE_NAME:-searches}
+  RQ_JOB_TIMEOUT_SECONDS: ${RQ_JOB_TIMEOUT_SECONDS:-7200}
+  GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
+  TWO_GIS_API_KEY: ${TWO_GIS_API_KEY:-}
+  YANDEX_MAPS_API_KEY: ${YANDEX_MAPS_API_KEY:-}
+  YANDEX_STORAGE_ALLOWED: ${YANDEX_STORAGE_ALLOWED:-false}
+  OPENSTREETMAP_ENABLED: ${OPENSTREETMAP_ENABLED:-false}
+  OVERPASS_API_URL: ${OVERPASS_API_URL:-https://overpass-api.de/api/interpreter}
+  OVERPASS_TIMEOUT_SECONDS: ${OVERPASS_TIMEOUT_SECONDS:-120}
+  OPENSTREETMAP_REQUESTS_PER_SECOND: ${OPENSTREETMAP_REQUESTS_PER_SECOND:-0.5}
+  OPENSTREETMAP_USER_AGENT: ${OPENSTREETMAP_USER_AGENT:-ClientParserMap/1.0}
+  GOOGLE_SHEETS_SPREADSHEET_ID: ${GOOGLE_SHEETS_SPREADSHEET_ID:-}
+  GOOGLE_SHEETS_ALL_COMPANIES_WORKSHEET: ${GOOGLE_SHEETS_ALL_COMPANIES_WORKSHEET:-Все компании}
+  GOOGLE_SHEETS_QUALIFIED_LEADS_WORKSHEET: ${GOOGLE_SHEETS_QUALIFIED_LEADS_WORKSHEET:-Готовые лиды}
+  GOOGLE_SHEETS_SEARCH_RUNS_WORKSHEET: ${GOOGLE_SHEETS_SEARCH_RUNS_WORKSHEET:-Запуски поиска}
+  GOOGLE_SERVICE_ACCOUNT_FILE: ${GOOGLE_SERVICE_ACCOUNT_FILE:-}
+  LEAD_SCORE_THRESHOLD: ${LEAD_SCORE_THRESHOLD:-50}
+  SCORING_RULES_FILE: ${SCORING_RULES_FILE:-app/scoring/scoring_rules.toml}
+  WEBSITE_TIMEOUT_SECONDS: ${WEBSITE_TIMEOUT_SECONDS:-10}
+  MAX_CONCURRENT_WEBSITE_CHECKS: ${MAX_CONCURRENT_WEBSITE_CHECKS:-10}
+  MAX_WEBSITE_REDIRECTS: ${MAX_WEBSITE_REDIRECTS:-5}
+  MAX_HTML_BYTES: ${MAX_HTML_BYTES:-5000000}
+  MAX_CONTACT_PAGES: ${MAX_CONTACT_PAGES:-8}
+  WEBSITE_CHECK_TTL_HOURS: ${WEBSITE_CHECK_TTL_HOURS:-168}
+  SOURCE_MAX_RETRIES: ${SOURCE_MAX_RETRIES:-3}
+  SOURCE_BACKOFF_BASE_SECONDS: ${SOURCE_BACKOFF_BASE_SECONDS:-1}
+  GOOGLE_REQUESTS_PER_SECOND: ${GOOGLE_REQUESTS_PER_SECOND:-5}
+  TWO_GIS_REQUESTS_PER_SECOND: ${TWO_GIS_REQUESTS_PER_SECOND:-5}
+  YANDEX_REQUESTS_PER_SECOND: ${YANDEX_REQUESTS_PER_SECOND:-1}
+
+x-app: &app
+  build:
+    context: .
+  environment: *app-environment
+  volumes:
+    - ./credentials:/run/secrets/google:ro
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-client_parser}
+      POSTGRES_USER: ${POSTGRES_USER:-client_parser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-client_parser}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  migrate:
+    <<: *app
+    command: ["uv", "run", "--no-sync", "alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *app
+    command: ["uv", "run", "--no-sync", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  worker:
+    <<: *app
+    command: ["uv", "run", "--no-sync", "python", "-m", "app.worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os; from redis import Redis; assert Redis.from_url(os.environ['REDIS_URL']).ping()\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+volumes:
+  postgres_data:
+  redis_data:

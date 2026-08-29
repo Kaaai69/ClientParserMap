@@ -188,16 +188,24 @@ git commit -m "chore: scaffold typed lead parser"
 @pytest.mark.asyncio
 async def test_create_job_writes_outbox_atomically(session):
     repo = SearchJobRepository(session)
-    job = await repo.create_with_outbox(SearchCriteria(city="Москва", query="детейлинг"), (SourceName.GOOGLE,))
+    job = await repo.create_with_outbox(
+        SearchCriteria(city="Москва", query="детейлинг"), (SourceName.GOOGLE,)
+    )
     await session.commit()
-    assert (await session.scalar(select(JobOutbox).where(JobOutbox.search_job_id == job.id))) is not None
+    assert (
+        await session.scalar(select(JobOutbox).where(JobOutbox.search_job_id == job.id))
+    ) is not None
 
 
 @pytest.mark.asyncio
 async def test_contact_upsert_merges_provenance(session, company):
     repo = CompanyRepository(session)
-    first = await repo.upsert_contact(company.id, ContactType.PHONE, "+79991234567", "+79991234567", SourceName.GOOGLE)
-    second = await repo.upsert_contact(company.id, ContactType.PHONE, "8 999 123-45-67", "+79991234567", SourceName.TWO_GIS)
+    first = await repo.upsert_contact(
+        company.id, ContactType.PHONE, "+79991234567", "+79991234567", SourceName.GOOGLE
+    )
+    second = await repo.upsert_contact(
+        company.id, ContactType.PHONE, "8 999 123-45-67", "+79991234567", SourceName.TWO_GIS
+    )
     await session.commit()
     assert first.id == second.id
     assert {item.source for item in second.sources} == {SourceName.GOOGLE, SourceName.TWO_GIS}
@@ -246,11 +254,14 @@ git commit -m "feat: add durable lead persistence"
 - [ ] **Step 1: Add table-driven failing normalization tests**
 
 ```python
-@pytest.mark.parametrize(("raw", "expected"), [
-    ("8 (999) 123-45-67", "+79991234567"),
-    ("+7 999 123 45 67", "+79991234567"),
-    ("79991234567", "+79991234567"),
-])
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("8 (999) 123-45-67", "+79991234567"),
+        ("+7 999 123 45 67", "+79991234567"),
+        ("79991234567", "+79991234567"),
+    ],
+)
 def test_normalize_russian_phone(raw, expected):
     assert normalize_phone(raw, "RU") == expected
 
@@ -261,7 +272,9 @@ def test_normalize_url_removes_tracking_and_fragment():
 
 def test_contact_extraction_finds_public_channels():
     html = '<a href="tel:89991234567">call</a><a href="mailto:Sales@Example.ru">mail</a><a href="https://t.me/nyra_test">tg</a>'
-    assert {(c.type, c.normalized_value) for c in extract_contacts_from_html(html, "https://example.ru")} == {
+    assert {
+        (c.type, c.normalized_value) for c in extract_contacts_from_html(html, "https://example.ru")
+    } == {
         (ContactType.PHONE, "+79991234567"),
         (ContactType.EMAIL, "sales@example.ru"),
         (ContactType.TELEGRAM, "nyra_test"),
@@ -308,11 +321,20 @@ git commit -m "feat: normalize company and contact data"
 
 ```python
 def test_same_phone_is_a_match():
-    assert match_company(candidate(phone="+79991234567"), incoming(phone="+79991234567")).rule == "PHONE"
+    assert (
+        match_company(candidate(phone="+79991234567"), incoming(phone="+79991234567")).rule
+        == "PHONE"
+    )
 
 
 def test_fuzzy_name_without_nearby_coordinates_is_not_a_match():
-    assert match_company(candidate(name="Авто Детейлинг", lat=55.75, lon=37.61), incoming(name="Авто Детейлинг", lat=59.93, lon=30.31)) is None
+    assert (
+        match_company(
+            candidate(name="Авто Детейлинг", lat=55.75, lon=37.61),
+            incoming(name="Авто Детейлинг", lat=59.93, lon=30.31),
+        )
+        is None
+    )
 
 
 @pytest.mark.asyncio
@@ -373,7 +395,9 @@ git commit -m "feat: deduplicate companies across sources"
 ```python
 @pytest.mark.asyncio
 async def test_google_maps_enterprise_fields_and_next_token(respx_mock, fixture_json):
-    respx_mock.post("https://places.googleapis.com/v1/places:searchText").respond(json=fixture_json("google_places_page.json"))
+    respx_mock.post("https://places.googleapis.com/v1/places:searchText").respond(
+        json=fixture_json("google_places_page.json")
+    )
     page = await GoogleSource(settings_with_google()).search_page(criteria(), None)
     assert page.next_cursor == "google-next"
     assert page.items[0].phones == ("+7 999 123-45-67", "8 (999) 123-45-67")
@@ -389,7 +413,9 @@ async def test_two_gis_missing_contact_permission_is_limited(respx_mock, fixture
 
 
 def test_registry_never_enables_unlicensed_yandex():
-    assert SourceName.YANDEX not in build_source_registry(settings_with_yandex(storage_allowed=False))
+    assert SourceName.YANDEX not in build_source_registry(
+        settings_with_yandex(storage_allowed=False)
+    )
 ```
 
 - [ ] **Step 2: Run and confirm missing-adapter failures**
@@ -450,7 +476,9 @@ async def test_checker_revalidates_redirect_target(fake_transport):
 @pytest.mark.asyncio
 async def test_404_is_dead(fake_transport):
     fake_transport.route("https://missing.test").respond(404, "missing")
-    assert (await WebsiteFetcher(fake_transport, public_policy()).fetch("https://missing.test")).status is WebsiteStatus.DEAD
+    assert (
+        await WebsiteFetcher(fake_transport, public_policy()).fetch("https://missing.test")
+    ).status is WebsiteStatus.DEAD
 ```
 
 - [ ] **Step 2: Run and confirm missing-analyzer failures**
@@ -493,17 +521,23 @@ git commit -m "feat: add safe bounded website checks"
 - [ ] **Step 1: Add failing fingerprint and crawl-bound tests**
 
 ```python
-@pytest.mark.parametrize(("html", "expected"), [
-    ('<meta name="generator" content="WordPress 6.5">', CMS.WORDPRESS),
-    ('<script src="https://static.tildacdn.com/js/tilda.js"></script>', CMS.TILDA),
-    ('<meta name="generator" content="Wix.com Website Builder">', CMS.WIX),
-])
+@pytest.mark.parametrize(
+    ("html", "expected"),
+    [
+        ('<meta name="generator" content="WordPress 6.5">', CMS.WORDPRESS),
+        ('<script src="https://static.tildacdn.com/js/tilda.js"></script>', CMS.TILDA),
+        ('<meta name="generator" content="Wix.com Website Builder">', CMS.WIX),
+    ],
+)
 def test_detects_supported_cms(html, expected):
     assert detect_cms(html, {}, "https://example.ru").cms is expected
 
 
 def test_clients_site_is_business_card():
-    assert classify_website("https://shop.clients.site", "<html></html>").website_type is WebsiteType.BUSINESS_CARD
+    assert (
+        classify_website("https://shop.clients.site", "<html></html>").website_type
+        is WebsiteType.BUSINESS_CARD
+    )
 
 
 @pytest.mark.asyncio
@@ -553,7 +587,9 @@ git commit -m "feat: detect site platforms and contacts"
 
 ```python
 def test_no_website_is_100_and_reason_is_russian(rules):
-    result = score_company(score_input(status=WebsiteStatus.NO_WEBSITE, phone="+79991234567"), rules, 50)
+    result = score_company(
+        score_input(status=WebsiteStatus.NO_WEBSITE, phone="+79991234567"), rules, 50
+    )
     assert result.site_opportunity_score == 100
     assert result.contactability_score == 100
     assert result.lead_state is LeadState.QUALIFIED
@@ -561,14 +597,19 @@ def test_no_website_is_100_and_reason_is_russian(rules):
 
 
 def test_tilda_business_signals_stack_but_clamp(rules):
-    result = score_company(score_input(cms=CMS.TILDA, rating=4.9, reviews=137, email="sales@example.ru"), rules, 50)
+    result = score_company(
+        score_input(cms=CMS.TILDA, rating=4.9, reviews=137, email="sales@example.ru"), rules, 50
+    )
     assert result.site_opportunity_score == 60
     assert result.contactability_score == 70
     assert result.preferred_contact_value == "sales@example.ru"
 
 
 def test_high_opportunity_without_contact_is_no_contacts(rules):
-    assert score_company(score_input(status=WebsiteStatus.DEAD), rules, 50).lead_state is LeadState.NO_CONTACTS
+    assert (
+        score_company(score_input(status=WebsiteStatus.DEAD), rules, 50).lead_state
+        is LeadState.NO_CONTACTS
+    )
 ```
 
 - [ ] **Step 2: Run and confirm missing-scoring failures**
@@ -613,12 +654,16 @@ git commit -m "feat: score and qualify contactable leads"
 @pytest.mark.asyncio
 async def test_every_company_is_written_to_all_companies(fake_sheets, below_threshold_company):
     await SheetsExporter(fake_sheets, sheet_settings()).sync_company(below_threshold_company)
-    assert fake_sheets.row("Все компании", "ID компании", str(below_threshold_company.id)) is not None
+    assert (
+        fake_sheets.row("Все компании", "ID компании", str(below_threshold_company.id)) is not None
+    )
     assert fake_sheets.rows("Готовые лиды") == []
 
 
 @pytest.mark.asyncio
-async def test_qualified_company_is_written_to_both_company_worksheets(fake_sheets, qualified_company):
+async def test_qualified_company_is_written_to_both_company_worksheets(
+    fake_sheets, qualified_company
+):
     await SheetsExporter(fake_sheets, sheet_settings()).sync_company(qualified_company)
     assert len(fake_sheets.rows("Все компании")) == 1
     assert len(fake_sheets.rows("Готовые лиды")) == 1
@@ -627,10 +672,20 @@ async def test_qualified_company_is_written_to_both_company_worksheets(fake_shee
 @pytest.mark.asyncio
 async def test_update_preserves_manual_lead_columns(fake_sheets, qualified_company):
     await SheetsExporter(fake_sheets, sheet_settings()).sync_company(qualified_company)
-    fake_sheets.edit("Готовые лиды", str(qualified_company.id), {"Статус работы": "В работе", "Менеджер": "Анна", "Комментарий": "Позвонить"})
-    await SheetsExporter(fake_sheets, sheet_settings()).sync_company(changed_machine_fields(qualified_company))
+    fake_sheets.edit(
+        "Готовые лиды",
+        str(qualified_company.id),
+        {"Статус работы": "В работе", "Менеджер": "Анна", "Комментарий": "Позвонить"},
+    )
+    await SheetsExporter(fake_sheets, sheet_settings()).sync_company(
+        changed_machine_fields(qualified_company)
+    )
     row = fake_sheets.row("Готовые лиды", "ID компании", str(qualified_company.id))
-    assert (row["Статус работы"], row["Менеджер"], row["Комментарий"]) == ("В работе", "Анна", "Позвонить")
+    assert (row["Статус работы"], row["Менеджер"], row["Комментарий"]) == (
+        "В работе",
+        "Анна",
+        "Позвонить",
+    )
 ```
 
 - [ ] **Step 2: Run and confirm missing-exporter failures**
@@ -744,7 +799,9 @@ git commit -m "feat: process durable search jobs"
 ```python
 @pytest.mark.asyncio
 async def test_post_search_creates_pending_job(async_client, configured_google):
-    response = await async_client.post("/search", json={"city": "Москва", "query": "детейлинг", "max_results": 300})
+    response = await async_client.post(
+        "/search", json={"city": "Москва", "query": "детейлинг", "max_results": 300}
+    )
     assert response.status_code == 202
     assert response.json()["status"] == "PENDING"
 
@@ -810,7 +867,9 @@ git commit -m "feat: expose search API and CLI"
 ```python
 def test_structured_log_redacts_secrets_and_contacts(capsys):
     configure_logging("INFO")
-    get_logger().info("source_failed", api_key="secret-key", phone="+79991234567", error_code="SOURCE_TIMEOUT")
+    get_logger().info(
+        "source_failed", api_key="secret-key", phone="+79991234567", error_code="SOURCE_TIMEOUT"
+    )
     output = capsys.readouterr().out
     assert "secret-key" not in output
     assert "+79991234567" not in output
@@ -919,3 +978,45 @@ If `origin` already exists, verify it is exactly `https://github.com/Kaaai69/Cli
 Run: `gh repo view Kaaai69/ClientParserMap --json url,visibility,defaultBranchRef && gh api repos/Kaaai69/ClientParserMap/commits/main --jq '.sha'`
 
 Expected: repository remains private, default branch is `main`, and remote SHA equals local `git rev-parse HEAD`.
+
+### Task 14: Secure Server Deployment
+
+**Files:**
+- Create on server: `/opt/client-parser-map/.env`
+- Create on server: `/opt/client-parser-map/compose.production.yml`
+- Create on server: `/opt/client-parser-map/credentials/` only when Sheets credentials are later supplied
+- Test: remote Docker Compose state and HTTP health endpoints
+
+**Interfaces:**
+- Consumes: verified `main` from `Kaaai69/ClientParserMap`, the operator-provided VPN/SSH access, and server-only secrets.
+- Produces: a restart-safe remote deployment with persistent PostgreSQL/Redis state and a loopback-only API until TLS ingress is configured.
+
+- [ ] **Step 1: Inspect the target host read-only**
+
+Connect using the existing operator credentials without printing them. Record OS, free disk/memory, Docker/Compose versions, active listeners, firewall, and existing reverse-proxy/container names. Do not install packages or stop services during inspection.
+
+- [ ] **Step 2: Prepare isolated server paths and secrets**
+
+Create `/opt/client-parser-map`, clone the private repository through the already authorized mechanism, and create a mode-`0600` `.env` containing generated database credentials and `API_AUTH_KEY`. Keep source API keys and Sheets credentials empty until supplied. Never copy `vpn.conf`, `server.txt`, GitHub tokens, or private SSH material into the repository or image.
+
+- [ ] **Step 3: Start production Compose without exposing an unauthenticated public port**
+
+Use a production override with restart policies, named volumes, resource-aware worker settings, and API publication `127.0.0.1:8000:8000`. Run migrations first, then start API and worker. Do not change an existing reverse proxy or firewall unless its exact ownership and collision-free route are verified.
+
+- [ ] **Step 4: Verify persistence, health, and restart behavior**
+
+Run remote checks equivalent to:
+
+```bash
+docker compose -f docker-compose.yml -f compose.production.yml ps
+curl --fail http://127.0.0.1:8000/health/live
+curl --fail http://127.0.0.1:8000/health/ready
+docker compose -f docker-compose.yml -f compose.production.yml restart api worker
+curl --retry 20 --retry-delay 2 --fail http://127.0.0.1:8000/health/ready
+```
+
+Expected: PostgreSQL, Redis, API, and worker return to healthy/running state; migrations are at head; volumes remain attached; logs contain no credentials.
+
+- [ ] **Step 5: Deliver the access and activation runbook**
+
+Document the SSH-tunnel command for local API access, remote Compose update/rollback commands, backup path/command, and exact fields the operator must later add for Google/2GIS and Google Sheets. State explicitly that live searching/export remains disabled until those third-party credentials are supplied.
