@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.dependencies import (
     SessionDependency,
@@ -8,7 +8,13 @@ from app.api.dependencies import (
 from app.core.enums import SourceName
 from app.db.models import SearchJob
 from app.db.repositories import SearchJobRepository
-from app.schemas.api import SearchAccepted, SearchJobResponse, SearchRequest
+from app.schemas.api import (
+    SearchAccepted,
+    SearchJobPage,
+    SearchJobResponse,
+    SearchJobSummary,
+    SearchRequest,
+)
 from app.schemas.domain import SearchCriteria
 
 router = APIRouter(prefix="/search", tags=["search"], dependencies=[Depends(require_api_key)])
@@ -52,6 +58,21 @@ async def create_search(
     return SearchAccepted(id=job.id, status=job.status)
 
 
+@router.get("", response_model=SearchJobPage)
+async def list_searches(
+    session: SessionDependency,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> SearchJobPage:
+    jobs, total = await SearchJobRepository(session).list_recent(limit=limit, offset=offset)
+    return SearchJobPage(
+        items=tuple(_job_summary(job) for job in jobs),
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
 @router.get("/{job_id}", response_model=SearchJobResponse)
 async def get_search(
     job_id: int,
@@ -64,6 +85,24 @@ async def get_search(
             detail={"code": "SEARCH_NOT_FOUND", "message": "Запуск поиска не найден"},
         )
     return _job_response(job)
+
+
+def _job_summary(job: SearchJob) -> SearchJobSummary:
+    return SearchJobSummary(
+        id=job.id,
+        city=job.city,
+        query=job.query,
+        requested_sources=tuple(SourceName(value) for value in job.requested_sources),
+        status=job.status,
+        stage=job.stage,
+        created_at=job.created_at,
+        finished_at=job.finished_at,
+        found_count=job.found_count,
+        unique_count=job.unique_count,
+        lead_count=job.lead_count,
+        exported_count=job.exported_count,
+        error_count=job.error_count,
+    )
 
 
 def _job_response(job: SearchJob) -> SearchJobResponse:

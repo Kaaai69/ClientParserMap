@@ -45,6 +45,9 @@ client-parser = "app.cli:app"
 [tool.setuptools.packages.find]
 include = ["app*"]
 
+[tool.setuptools.package-data]
+app = ["web/*.html", "scoring/*.toml"]
+
 [tool.pytest.ini_options]
 addopts = "--strict-markers"
 asyncio_mode = "auto"

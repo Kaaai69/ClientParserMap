@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import Final, cast
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -62,6 +62,15 @@ class SearchJobRepository:
         if for_update:
             statement = statement.with_for_update()
         return cast(SearchJob | None, await self.session.scalar(statement))
+
+    async def list_recent(self, *, limit: int, offset: int) -> tuple[tuple[SearchJob, ...], int]:
+        total = int(await self.session.scalar(select(func.count()).select_from(SearchJob)) or 0)
+        jobs = (
+            await self.session.scalars(
+                select(SearchJob).order_by(SearchJob.id.desc()).limit(limit).offset(offset)
+            )
+        ).all()
+        return tuple(jobs), total
 
     async def set_stage(self, job_id: int, stage: JobStage) -> None:
         job = await self.get(job_id, for_update=True)

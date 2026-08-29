@@ -63,6 +63,37 @@ class SearchJobResponse(ApiModel):
     errors: tuple[dict[str, Any], ...]
 
 
+class SearchJobSummary(ApiModel):
+    id: int
+    city: str
+    query: str
+    requested_sources: tuple[SourceName, ...]
+    status: JobStatus
+    stage: JobStage
+    created_at: datetime
+    finished_at: datetime | None
+    found_count: int
+    unique_count: int
+    lead_count: int
+    exported_count: int
+    error_count: int
+
+
+class SearchJobPage(ApiModel):
+    items: tuple[SearchJobSummary, ...]
+    total: int
+    limit: int
+    offset: int
+
+
+class MetaResponse(ApiModel):
+    enabled_sources: tuple[SourceName, ...]
+    sheets_enabled: bool
+    spreadsheet_url: str | None
+    lead_score_threshold: int
+    auth_required: bool
+
+
 class LeadSummary(ApiModel):
     id: int
     name: str

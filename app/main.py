@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 
-from app.api.routes import companies, health, leads, search
+from app.api.routes import companies, console, health, leads, meta, search
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging, get_logger
 from app.db.session import Database
@@ -56,7 +56,9 @@ def create_app(
     application.state.settings = resolved_settings
     application.state.database = resolved_database
     application.state.queue = resolved_queue
+    application.include_router(console.router)
     application.include_router(health.router)
+    application.include_router(meta.router)
     application.include_router(search.router)
     application.include_router(leads.router)
     application.include_router(companies.router)
