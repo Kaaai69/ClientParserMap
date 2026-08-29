@@ -45,6 +45,25 @@ class OnePageSource:
         return None
 
 
+class LimitedPageSource:
+    name = SourceName.TWO_GIS
+
+    def __init__(self, companies: tuple[SourceCompany, ...]) -> None:
+        self.companies = companies
+        self.calls = 0
+
+    async def search_page(
+        self,
+        criteria: SearchCriteria,
+        cursor: str | None,
+    ) -> SourcePage:
+        self.calls += 1
+        return SourcePage(items=self.companies, next_cursor="next-page", exhausted=False)
+
+    async def aclose(self) -> None:
+        return None
+
+
 class FakeAnalyzer:
     def __init__(self) -> None:
         self.calls = 0
@@ -200,3 +219,50 @@ async def test_pipeline_deduplicates_analyzes_scores_and_exports_once() -> None:
         assert len(sheets.rows("Все компании")) == 1
         assert len(sheets.rows("Готовые лиды")) == 1
         assert len(sheets.rows("Запуски поиска")) == 2
+
+
+async def test_pipeline_completes_source_state_when_result_limit_stops_collection() -> None:
+    async for session_factory in database_factory():
+        criteria = SearchCriteria(city="Москва", query="детейлинг", max_results=5)
+        async with session_factory() as session:
+            job = await SearchJobRepository(session).create_with_outbox(
+                criteria,
+                (SourceName.TWO_GIS,),
+            )
+            await session.commit()
+            job_id = job.id
+
+        companies = tuple(
+            SourceCompany(
+                source=SourceName.TWO_GIS,
+                source_id=f"2gis-{index}",
+                name=f"Компания {index}",
+                city="Москва",
+                address=f"Тверская улица, {index}",
+            )
+            for index in range(1, 11)
+        )
+        source = LimitedPageSource(companies)
+        analyzer = FakeAnalyzer()
+        sheets = InMemorySheets()
+        settings = Settings(_env_file=None, google_sheets_spreadsheet_id="sheet-1")
+        pipeline = SearchPipeline(
+            session_factory,
+            {SourceName.TWO_GIS: source},
+            analyzer,
+            ScoringRules.load(settings.scoring_rules_file),
+            settings,
+            SheetsExporter(sheets, settings),
+        )
+
+        await pipeline.run(job_id)
+
+        async with session_factory() as session:
+            stored_job = await SearchJobRepository(session).get(job_id)
+            assert stored_job is not None
+            source_state = stored_job.source_states[0]
+            assert stored_job.unique_count == 5
+            assert source_state.status is JobStatus.COMPLETED
+            assert source_state.exhausted is False
+
+        assert source.calls == 1

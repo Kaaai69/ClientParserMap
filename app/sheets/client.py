@@ -11,6 +11,7 @@ from app.core.config import Settings
 from app.core.errors import ConfigurationError
 
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
+GOOGLE_API_NUM_RETRIES = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -208,7 +209,10 @@ class GoogleSheetsClient:
 
 
 async def _execute(request: Any) -> dict[str, Any]:
-    return cast(dict[str, Any], await asyncio.to_thread(request.execute))
+    return cast(
+        dict[str, Any],
+        await asyncio.to_thread(request.execute, num_retries=GOOGLE_API_NUM_RETRIES),
+    )
 
 
 def _quote_title(title: str) -> str:
