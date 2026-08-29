@@ -43,11 +43,12 @@ nwr["amenity"="car_wash"](area.searchArea);
 nwr["shop"="car_repair"](area.searchArea);
 ```
 
-They are combined with case-insensitive text selectors over `name`, `brand`, `operator`,
-`description`, and `service`, using the pattern
-`детейлинг|автодетейлинг|detailing|полировк|керамическ`.
+The mapped aliases intentionally use only these indexed category selectors. A live query
+against the shared endpoint returned an HTTP 200 response with an Overpass timeout remark
+when city-wide text regex selectors were added; the two indexed selectors return data.
 
-Unknown niches use the same text tags with a regex-escaped version of the user's query.
+Unknown niches use case-insensitive text selectors over `name`, `brand`, `operator`,
+`description`, and `service` with a regex-escaped version of the user's query.
 All inserted Overpass string values are JSON-quoted and regex values are escaped before
 quoting, so a city or query cannot inject Overpass QL. The result clause is
 `out center tags <max_results>;`, making the request bounded by the user's existing
@@ -100,6 +101,8 @@ The server deployment explicitly enables OpenStreetMap.
 
 - a non-list top-level `elements` field is `SOURCE_INVALID_PAYLOAD`;
 - malformed individual elements are skipped rather than failing the whole page;
+- a non-empty Overpass `remark` is `SOURCE_OVERPASS_REMARK`, retryable, and never an empty
+  successful page;
 - HTTP and JSON errors continue to use the shared source error codes;
 - a non-empty cursor returns an empty exhausted page and never repeats the first request.
 
@@ -108,11 +111,13 @@ The server deployment explicitly enables OpenStreetMap.
 Contract tests must prove:
 
 1. the request is a form-encoded POST with the configured user agent, bounded result count,
-   city area, detailing tag selectors, and text selectors;
+   city area, and indexed detailing tag selectors without city-wide text regex selectors;
 2. node and way elements map names, addresses, coordinates, contact fields, categories, and
    opening hours correctly;
-3. user-controlled city/query strings are escaped and cannot add Overpass statements;
-4. malformed payloads raise `SOURCE_INVALID_PAYLOAD`;
+3. user-controlled city/query strings in unknown-niche fallback selectors are escaped and
+   cannot add Overpass statements;
+4. malformed payloads raise `SOURCE_INVALID_PAYLOAD`, malformed elements are skipped, and
+   an Overpass remark raises a retryable source error;
 5. a cursor does not repeat the network request;
 6. configuration and registry enable the keyless source only when explicitly requested.
 

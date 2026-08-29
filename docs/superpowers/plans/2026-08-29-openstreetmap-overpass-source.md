@@ -24,6 +24,15 @@
 - Existing Google, 2GIS, Yandex, PostgreSQL, Redis/RQ, website analysis, scoring, and Google Sheets behavior must remain compatible.
 - README attribution links to `https://www.openstreetmap.org/copyright` and describes the public endpoint's lack of commercial SLA.
 
+### Revision: shared-endpoint query evidence
+
+The public endpoint returned HTTP 200 with an Overpass timeout `remark` when a city-wide
+detailing text regex selector was included. For mapped detailing aliases, emit only the
+indexed `amenity=car_wash` and `shop=car_repair` selectors; do not add text regex selectors.
+Retain regex-escaped text selectors for unmapped niches. Treat every non-empty Overpass
+`remark` as a retryable `SOURCE_OVERPASS_REMARK`, never as an empty successful page. Tests
+must also show that a malformed individual element is skipped while valid page elements remain.
+
 ---
 
 ### Task 1: Add, verify, and document the OpenStreetMap Overpass source
@@ -120,7 +129,6 @@
   DETAILING_ALIASES = frozenset(
       {"детейлинг", "автодетейлинг", "детейлинг авто", "detailing", "car detailing"}
   )
-  DETAILING_PATTERN = "детейлинг|автодетейлинг|detailing|полировк|керамическ"
   TEXT_TAGS = ("name", "brand", "operator", "description", "service")
 
 

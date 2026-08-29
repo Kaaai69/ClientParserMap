@@ -3,6 +3,7 @@ import re
 from typing import Any
 
 import httpx
+from pydantic import ValidationError
 
 from app.core.config import Settings
 from app.core.enums import ContactsAccess, SourceName
@@ -15,7 +16,6 @@ OVERPASS_QUERY_TIMEOUT_SECONDS = 60
 DETAILING_ALIASES = frozenset(
     {"детейлинг", "автодетейлинг", "детейлинг авто", "detailing", "car detailing"}
 )
-DETAILING_PATTERN = "детейлинг|автодетейлинг|detailing|полировк|керамическ"
 TEXT_TAGS = ("name", "brand", "operator", "description", "service")
 
 
@@ -47,6 +47,7 @@ class OpenStreetMapSource:
             self._endpoint,
             data={"data": _build_query(criteria)},
         )
+        _raise_for_remark(payload)
         elements = _payload_elements(payload)
         items = tuple(
             company
@@ -62,14 +63,13 @@ class OpenStreetMapSource:
 def _build_query(criteria: SearchCriteria) -> str:
     """Return the bounded administrative-area Overpass QL query."""
     query = criteria.query.casefold()
-    pattern = _quoted(DETAILING_PATTERN) if query in DETAILING_ALIASES else _regex(criteria.query)
-    selectors = _text_selectors(pattern)
     if query in DETAILING_ALIASES:
         selectors = (
             'nwr["amenity"="car_wash"](area.searchArea);\n'
             'nwr["shop"="car_repair"](area.searchArea);\n'
-            f"{selectors}"
         )
+    else:
+        selectors = _text_selectors(_regex(criteria.query))
     return (
         f"[out:json][timeout:{OVERPASS_QUERY_TIMEOUT_SECONDS}];\n"
         f'area["boundary"="administrative"]["name"={_quoted(criteria.city)}]->.searchArea;\n'
@@ -102,6 +102,16 @@ def _payload_elements(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return [element for element in raw_elements if isinstance(element, dict)]
 
 
+def _raise_for_remark(payload: dict[str, Any]) -> None:
+    remark = _optional_text(payload.get("remark"))
+    if remark:
+        raise SourceRequestError(
+            "SOURCE_OVERPASS_REMARK",
+            "OpenStreetMap не выполнил запрос",
+            retryable=True,
+        )
+
+
 def _map_company(element: dict[str, Any], city: str) -> SourceCompany | None:
     """Map one valid named node, way, or relation; skip malformed elements."""
     element_type = element.get("type")
@@ -127,41 +137,44 @@ def _map_company(element: dict[str, Any], city: str) -> SourceCompany | None:
     latitude, longitude = _coordinates(element, element_type)
     phones = _tag_values(tags, ("phone", "contact:phone", "mobile", "contact:mobile"))
     opening_hours = _optional_text(tags.get("opening_hours"))
-    return SourceCompany(
-        source=SourceName.OPENSTREETMAP,
-        source_id=f"{element_type}/{element_id}",
-        name=name,
-        city=city,
-        categories=_categories(tags),
-        address=_address(tags),
-        primary_phone=phones[0] if phones else None,
-        phones=phones,
-        emails=_tag_values(tags, ("email", "contact:email")),
-        websites=_tag_values(tags, ("website", "contact:website", "url")),
-        telegram=_tag_values(tags, ("telegram", "contact:telegram")),
-        whatsapp=_tag_values(tags, ("whatsapp", "contact:whatsapp")),
-        vk=_tag_values(tags, ("vk", "contact:vk")),
-        instagram=_tag_values(tags, ("instagram", "contact:instagram")),
-        other_socials=_tag_values(
-            tags,
-            (
-                "facebook",
-                "contact:facebook",
-                "youtube",
-                "contact:youtube",
-                "x",
-                "contact:x",
-                "twitter",
-                "contact:twitter",
-                "odnoklassniki",
-                "contact:odnoklassniki",
+    try:
+        return SourceCompany(
+            source=SourceName.OPENSTREETMAP,
+            source_id=f"{element_type}/{element_id}",
+            name=name,
+            city=city,
+            categories=_categories(tags),
+            address=_address(tags),
+            primary_phone=phones[0] if phones else None,
+            phones=phones,
+            emails=_tag_values(tags, ("email", "contact:email")),
+            websites=_tag_values(tags, ("website", "contact:website", "url")),
+            telegram=_tag_values(tags, ("telegram", "contact:telegram")),
+            whatsapp=_tag_values(tags, ("whatsapp", "contact:whatsapp")),
+            vk=_tag_values(tags, ("vk", "contact:vk")),
+            instagram=_tag_values(tags, ("instagram", "contact:instagram")),
+            other_socials=_tag_values(
+                tags,
+                (
+                    "facebook",
+                    "contact:facebook",
+                    "youtube",
+                    "contact:youtube",
+                    "x",
+                    "contact:x",
+                    "twitter",
+                    "contact:twitter",
+                    "odnoklassniki",
+                    "contact:odnoklassniki",
+                ),
             ),
-        ),
-        latitude=latitude,
-        longitude=longitude,
-        working_hours={"opening_hours": opening_hours} if opening_hours else None,
-        contacts_access=ContactsAccess.FULL,
-    )
+            latitude=latitude,
+            longitude=longitude,
+            working_hours={"opening_hours": opening_hours} if opening_hours else None,
+            contacts_access=ContactsAccess.FULL,
+        )
+    except ValidationError:
+        return None
 
 
 def _tag_values(tags: dict[str, Any], keys: tuple[str, ...]) -> tuple[str, ...]:

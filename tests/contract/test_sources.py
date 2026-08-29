@@ -43,6 +43,7 @@ async def test_openstreetmap_builds_bounded_detailing_query_and_maps_contacts(
     assert "amenity" in body and "car_wash" in body
     assert "shop" in body and "car_repair" in body
     assert "300" in body
+    assert "~" not in parse_qs(body)["data"][0]
     assert page.next_cursor is None
     assert page.exhausted is True
     assert company.source is SourceName.OPENSTREETMAP
@@ -123,6 +124,43 @@ async def test_openstreetmap_rejects_non_list_elements(respx_mock: MockRouter) -
         await source.search_page(criteria(), None)
 
     assert error.value.code == "SOURCE_INVALID_PAYLOAD"
+
+
+async def test_openstreetmap_skips_element_with_invalid_coordinate_pair(
+    respx_mock: MockRouter,
+    fixture_json: Callable[[str], dict[str, Any]],
+) -> None:
+    payload = fixture_json("overpass_page.json")
+    payload["elements"].append(
+        {
+            "type": "node",
+            "id": 303,
+            "lat": 91,
+            "lon": 37.62,
+            "tags": {"name": "Некорректная координата"},
+        }
+    )
+    respx_mock.post("https://overpass-api.de/api/interpreter").respond(json=payload)
+    source = OpenStreetMapSource(Settings(_env_file=None, openstreetmap_enabled=True))
+
+    page = await source.search_page(criteria(), None)
+
+    assert [company.source_id for company in page.items] == ["node/101", "way/202"]
+
+
+async def test_openstreetmap_raises_retryable_error_for_overpass_remark(
+    respx_mock: MockRouter,
+) -> None:
+    respx_mock.post("https://overpass-api.de/api/interpreter").respond(
+        json={"remark": "runtime error: Query timed out", "elements": []}
+    )
+    source = OpenStreetMapSource(Settings(_env_file=None, openstreetmap_enabled=True))
+
+    with pytest.raises(SourceRequestError) as error:
+        await source.search_page(criteria(), None)
+
+    assert error.value.code == "SOURCE_OVERPASS_REMARK"
+    assert error.value.retryable is True
 
 
 async def test_openstreetmap_cursor_does_not_repeat_request(respx_mock: MockRouter) -> None:
