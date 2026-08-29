@@ -46,9 +46,12 @@ class OnePageSource:
 
 
 class LimitedPageSource:
-    name = SourceName.TWO_GIS
-
-    def __init__(self, companies: tuple[SourceCompany, ...]) -> None:
+    def __init__(
+        self,
+        name: SourceName,
+        companies: tuple[SourceCompany, ...],
+    ) -> None:
+        self.name = name
         self.companies = companies
         self.calls = 0
 
@@ -242,7 +245,7 @@ async def test_pipeline_completes_source_state_when_result_limit_stops_collectio
             )
             for index in range(1, 11)
         )
-        source = LimitedPageSource(companies)
+        source = LimitedPageSource(SourceName.TWO_GIS, companies)
         analyzer = FakeAnalyzer()
         sheets = InMemorySheets()
         settings = Settings(_env_file=None, google_sheets_spreadsheet_id="sheet-1")
@@ -266,3 +269,54 @@ async def test_pipeline_completes_source_state_when_result_limit_stops_collectio
             assert source_state.exhausted is False
 
         assert source.calls == 1
+
+
+async def test_pipeline_completes_all_running_sources_when_later_source_reaches_limit() -> None:
+    async for session_factory in database_factory():
+        criteria = SearchCriteria(city="Москва", query="детейлинг", max_results=5)
+        source_names = (SourceName.GOOGLE, SourceName.TWO_GIS)
+        async with session_factory() as session:
+            job = await SearchJobRepository(session).create_with_outbox(criteria, source_names)
+            await session.commit()
+            job_id = job.id
+
+        def companies(source: SourceName, count: int) -> tuple[SourceCompany, ...]:
+            return tuple(
+                SourceCompany(
+                    source=source,
+                    source_id=f"{source.value}-{index}",
+                    name=f"{source.value} Компания {index}",
+                    city="Москва",
+                    address=f"{source.value} улица, {index}",
+                )
+                for index in range(1, count + 1)
+            )
+
+        google = LimitedPageSource(SourceName.GOOGLE, companies(SourceName.GOOGLE, 2))
+        two_gis = LimitedPageSource(SourceName.TWO_GIS, companies(SourceName.TWO_GIS, 10))
+        analyzer = FakeAnalyzer()
+        sheets = InMemorySheets()
+        settings = Settings(_env_file=None, google_sheets_spreadsheet_id="sheet-1")
+        pipeline = SearchPipeline(
+            session_factory,
+            {SourceName.GOOGLE: google, SourceName.TWO_GIS: two_gis},
+            analyzer,
+            ScoringRules.load(settings.scoring_rules_file),
+            settings,
+            SheetsExporter(sheets, settings),
+        )
+
+        await pipeline.run(job_id)
+
+        async with session_factory() as session:
+            stored_job = await SearchJobRepository(session).get(job_id)
+            assert stored_job is not None
+            assert stored_job.unique_count == 5
+            assert [state.status for state in stored_job.source_states] == [
+                JobStatus.COMPLETED,
+                JobStatus.COMPLETED,
+            ]
+            assert all(state.exhausted is False for state in stored_job.source_states)
+
+        assert google.calls == 1
+        assert two_gis.calls == 1

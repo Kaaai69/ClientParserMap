@@ -262,13 +262,16 @@ class SearchPipeline:
                     self._source_failure(job, state, "SOURCE_CURSOR_STALLED")
                 elif state.exhausted:
                     state.status = JobStatus.COMPLETED
-                elif accepted_total >= job.max_results:
-                    state.status = JobStatus.COMPLETED
                 await session.commit()
                 if accepted_total >= job.max_results:
                     break
             if not progressed:
                 break
+        if accepted_total >= job.max_results:
+            for state in job.source_states:
+                if state.status is JobStatus.RUNNING:
+                    state.status = JobStatus.COMPLETED
+            await session.commit()
 
     async def _analyze(self, session: AsyncSession, job: SearchJob) -> None:
         job.stage = JobStage.ANALYZING_WEBSITES
