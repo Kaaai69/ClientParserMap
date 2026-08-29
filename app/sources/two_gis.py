@@ -73,11 +73,7 @@ class TwoGisSource:
         result = _api_result(payload)
         items = _region_entries(result)
         matching = next(
-            (
-                region_id
-                for region_id, name in items
-                if name.casefold() == cache_key
-            ),
+            (region_id for region_id, name in items if name.casefold() == cache_key),
             None,
         )
         if matching is None and items:

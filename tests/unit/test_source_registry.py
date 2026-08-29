@@ -23,3 +23,9 @@ def test_registry_builds_only_configured_sources() -> None:
     )
 
     assert set(build_source_registry(settings)) == {SourceName.GOOGLE, SourceName.TWO_GIS}
+
+
+def test_registry_builds_keyless_openstreetmap_when_enabled() -> None:
+    settings = Settings(_env_file=None, openstreetmap_enabled=True)
+
+    assert set(build_source_registry(settings)) == {SourceName.OPENSTREETMAP}

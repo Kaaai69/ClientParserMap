@@ -5,6 +5,7 @@ class SourceName(StrEnum):
     GOOGLE = "google"
     TWO_GIS = "2gis"
     YANDEX = "yandex"
+    OPENSTREETMAP = "openstreetmap"
 
 
 class ContactsAccess(StrEnum):

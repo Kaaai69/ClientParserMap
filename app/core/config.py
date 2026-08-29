@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     two_gis_api_key: SecretStr | None = None
     yandex_maps_api_key: SecretStr | None = None
     yandex_storage_allowed: bool = False
+    openstreetmap_enabled: bool = False
+    overpass_api_url: str = "https://overpass-api.de/api/interpreter"
+    overpass_timeout_seconds: float = Field(default=120, gt=0, le=300)
+    openstreetmap_requests_per_second: float = Field(default=0.5, gt=0, le=10)
+    openstreetmap_user_agent: str = "ClientParserMap/1.0"
 
     google_sheets_spreadsheet_id: str | None = None
     google_sheets_all_companies_worksheet: str = "Все компании"
@@ -86,6 +91,8 @@ class Settings(BaseSettings):
             enabled.append(SourceName.TWO_GIS)
         if self.yandex_maps_api_key and self.yandex_storage_allowed:
             enabled.append(SourceName.YANDEX)
+        if self.openstreetmap_enabled:
+            enabled.append(SourceName.OPENSTREETMAP)
         return tuple(enabled)
 
     @property

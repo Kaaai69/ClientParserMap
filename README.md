@@ -8,6 +8,7 @@ PostgreSQL — единственный источник истины. Redis/RQ 
 
 - Официальный Google Places API (New) Text Search.
 - Официальный 2GIS Places API; если тариф не даёт `contact_groups`, компания сохраняется с `contacts_access=LIMITED`.
+- Keyless-источник OpenStreetMap через Overpass API, включаемый явно.
 - Адаптер Yandex Organization Search присутствует, но включается только при одновременных `YANDEX_MAPS_API_KEY` и `YANDEX_STORAGE_ALLOWED=true`.
 - Нормализация телефонов, URL, email и публичных соцсетей.
 - Консервативное объединение по телефону, домену, ID источника, имени/адресу и имени/координатам.
@@ -20,7 +21,7 @@ PostgreSQL — единственный источник истины. Redis/RQ 
 
 ## Быстрый запуск через Docker
 
-Требуются Docker Compose, ключ хотя бы одного каталога и, для внешнего доступа, случайный `API_AUTH_KEY`.
+Требуются Docker Compose, включённый источник данных и, для внешнего доступа, случайный `API_AUTH_KEY`.
 
 ```bash
 cp .env.example .env
@@ -68,6 +69,14 @@ YANDEX_STORAGE_ALLOWED=false
 
 Не меняйте флаг на `true`, пока ваш коммерческий договор явно не разрешает требуемое хранение данных. Актуальные условия опубликованы в [документации коммерческого API Яндекса](https://yandex.com/dev/commercial/doc/ru/concepts/geosearch).
 
+OpenStreetMap не требует ключа, но выключен по умолчанию:
+
+```dotenv
+OPENSTREETMAP_ENABLED=true
+```
+
+Данные © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) и доступны на условиях ODbL. Общий endpoint Overpass не имеет коммерческого SLA; для устойчивого высоконагруженного сбора используйте собственный Overpass или endpoint с подходящим договором.
+
 ## Google Sheets
 
 1. Создайте сервисный аккаунт Google Cloud и включите Google Sheets API.
@@ -111,7 +120,7 @@ docker compose exec api uv run --no-sync python -m app.cli search \
   --city "Москва" --query "детейлинг" --max-results 300
 ```
 
-`--source google`, `--source 2gis`, `--min-rating`, `--min-reviews` и `--no-wait` позволяют ограничить запуск.
+`--source google`, `--source 2gis`, `--source openstreetmap`, `--min-rating`, `--min-reviews` и `--no-wait` позволяют ограничить запуск.
 
 ## Автономный smoke-тест
 
@@ -150,7 +159,7 @@ docker compose run --rm migrate
 
 Частые причины проблем:
 
-- `NO_ENABLED_SOURCES` — нет ключа Google/2GIS либо запрошен запрещённый Яндекс.
+- `NO_ENABLED_SOURCES` — нет ключа Google/2GIS, не включён `OPENSTREETMAP_ENABLED=true` либо запрошен запрещённый Яндекс.
 - `401` API — отсутствует или неверен `X-API-Key`.
 - `health/ready` возвращает `503` — недоступен PostgreSQL или Redis.
 - Нет строк в Sheets — неверный spreadsheet ID, файл ключа не смонтирован или таблица не расшарена сервисному аккаунту.

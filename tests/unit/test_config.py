@@ -34,6 +34,13 @@ def test_enabled_sources_only_include_configured_and_licensed_adapters() -> None
     )
 
 
+def test_openstreetmap_requires_explicit_enablement() -> None:
+    assert SourceName.OPENSTREETMAP not in Settings(_env_file=None).enabled_sources
+    enabled = Settings(_env_file=None, openstreetmap_enabled=True)
+
+    assert SourceName.OPENSTREETMAP in enabled.enabled_sources
+
+
 def test_sheet_names_are_human_friendly_by_default() -> None:
     settings = Settings(_env_file=None)
 

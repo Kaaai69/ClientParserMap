@@ -1,0 +1,58 @@
+{
+  "version": 0.6,
+  "elements": [
+    {
+      "type": "node",
+      "id": 101,
+      "lat": 55.751,
+      "lon": 37.611,
+      "tags": {
+        "name": "Детейлинг на Тверской",
+        "amenity": "car_wash",
+        "shop": "car_repair",
+        "craft": "painter",
+        "office": "company",
+        "tourism": "information",
+        "healthcare": "clinic",
+        "addr:full": "Москва, Тверская улица, 1",
+        "phone": "+7 999 111-22-33; +7 999 444-55-66",
+        "contact:phone": "+7 999 111-22-33",
+        "mobile": "+7 999 777-88-99",
+        "contact:mobile": "+7 999 777-88-99",
+        "email": "detail@example.com",
+        "contact:email": "sales@example.com; detail@example.com",
+        "website": "https://detail.example",
+        "contact:website": "https://contact.detail.example",
+        "url": "https://profile.detail.example",
+        "telegram": "https://t.me/detail",
+        "contact:telegram": "https://t.me/contact_detail",
+        "whatsapp": "https://wa.me/79991112233",
+        "contact:whatsapp": "https://wa.me/79994445566",
+        "vk": "https://vk.com/detail",
+        "contact:vk": "https://vk.com/contact_detail",
+        "instagram": "https://instagram.com/detail",
+        "contact:instagram": "https://instagram.com/contact_detail",
+        "facebook": "https://facebook.com/detail",
+        "contact:facebook": "https://facebook.com/contact_detail",
+        "youtube": "https://youtube.com/@detail",
+        "contact:youtube": "https://youtube.com/@contact_detail",
+        "twitter": "https://x.com/detail",
+        "contact:twitter": "https://x.com/contact_detail",
+        "odnoklassniki": "https://ok.ru/detail",
+        "contact:odnoklassniki": "https://ok.ru/contact_detail",
+        "opening_hours": "Mo-Su 09:00-21:00"
+      }
+    },
+    {
+      "type": "way",
+      "id": 202,
+      "center": {"lat": 55.75, "lon": 37.61},
+      "tags": {
+        "brand": "Detail Way",
+        "addr:street": "Арбат",
+        "addr:housenumber": "12",
+        "service": "детейлинг"
+      }
+    }
+  ]
+}
