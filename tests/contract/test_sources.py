@@ -42,6 +42,11 @@ async def test_openstreetmap_builds_bounded_detailing_query_and_maps_contacts(
     assert request.headers["Content-Type"].startswith("application/x-www-form-urlencoded")
     assert "amenity" in body and "car_wash" in body
     assert "shop" in body and "car_repair" in body
+    # The row limit applies before mapping, so unnamed objects must be excluded
+    # by Overpass itself rather than dropped afterwards.
+    query = parse_qs(body)["data"][0]
+    assert '["amenity"="car_wash"]["name"]' in query
+    assert '["shop"="car_repair"]["name"]' in query
     assert "300" in body
     assert "~" not in parse_qs(body)["data"][0]
     assert page.next_cursor is None

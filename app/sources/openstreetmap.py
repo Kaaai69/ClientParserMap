@@ -64,9 +64,11 @@ def _build_query(criteria: SearchCriteria) -> str:
     """Return the bounded administrative-area Overpass QL query."""
     query = criteria.query.casefold()
     if query in DETAILING_ALIASES:
+        # Require a name server-side: the row limit is spent before mapping, and
+        # unnamed car washes would otherwise crowd out every usable result.
         selectors = (
-            'nwr["amenity"="car_wash"](area.searchArea);\n'
-            'nwr["shop"="car_repair"](area.searchArea);\n'
+            'nwr["amenity"="car_wash"]["name"](area.searchArea);\n'
+            'nwr["shop"="car_repair"]["name"](area.searchArea);\n'
         )
     else:
         selectors = _text_selectors(_regex(criteria.query))
