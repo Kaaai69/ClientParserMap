@@ -229,8 +229,10 @@ class SearchPipeline:
                     result_count=len(page.items),
                 )
 
+                page_truncated = False
                 for record in page.items:
                     if accepted_total >= job.max_results:
+                        page_truncated = True
                         break
                     job.found_count += 1
                     state.found_count += 1
@@ -257,11 +259,14 @@ class SearchPipeline:
                     accepted_total += 1
 
                 state.next_cursor = page.next_cursor
-                state.exhausted = page.exhausted or page.next_cursor is None
-                if not state.exhausted and state.next_cursor == previous_cursor:
-                    self._source_failure(job, state, "SOURCE_CURSOR_STALLED")
-                elif state.exhausted:
-                    state.status = JobStatus.COMPLETED
+                state.exhausted = (
+                    False if page_truncated else page.exhausted or page.next_cursor is None
+                )
+                if not page_truncated:
+                    if not state.exhausted and state.next_cursor == previous_cursor:
+                        self._source_failure(job, state, "SOURCE_CURSOR_STALLED")
+                    elif state.exhausted:
+                        state.status = JobStatus.COMPLETED
                 await session.commit()
                 if accepted_total >= job.max_results:
                     break
