@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends
 
 from app.api.dependencies import SettingsDependency, require_api_key
-from app.schemas.api import MetaResponse
+from app.presets import load_presets
+from app.schemas.api import MetaResponse, NichePresetResponse
 
 router = APIRouter(prefix="/meta", tags=["meta"], dependencies=[Depends(require_api_key)])
 
@@ -22,4 +23,9 @@ async def read_meta(settings: SettingsDependency) -> MetaResponse:
         ),
         lead_score_threshold=settings.lead_score_threshold,
         auth_required=settings.api_auth_key is not None,
+        niche_presets=tuple(
+            NichePresetResponse(id=item.id, title=item.title, queries=item.queries)
+            for item in load_presets(settings.niche_presets_file).preset
+        ),
+        max_batch_searches=settings.max_batch_searches,
     )

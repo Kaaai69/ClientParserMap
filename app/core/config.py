@@ -45,6 +45,8 @@ class Settings(BaseSettings):
 
     lead_score_threshold: int = Field(default=50, ge=0, le=100)
     scoring_rules_file: Path = Path("app/scoring/scoring_rules.toml")
+    niche_presets_file: Path = Path("app/presets/niche_presets.toml")
+    max_batch_searches: int = Field(default=50, ge=1, le=200)
 
     website_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
     max_concurrent_website_checks: int = Field(default=10, ge=1, le=100)

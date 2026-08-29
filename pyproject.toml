@@ -46,7 +46,7 @@ client-parser = "app.cli:app"
 include = ["app*"]
 
 [tool.setuptools.package-data]
-app = ["web/*.html", "scoring/*.toml"]
+app = ["web/*.html", "scoring/*.toml", "presets/*.toml"]
 
 [tool.pytest.ini_options]
 addopts = "--strict-markers"

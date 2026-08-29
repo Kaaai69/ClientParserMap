@@ -5,10 +5,15 @@ from app.api.dependencies import (
     SettingsDependency,
     require_api_key,
 )
+from app.core.config import Settings
 from app.core.enums import SourceName
 from app.db.models import SearchJob
 from app.db.repositories import SearchJobRepository
+from app.presets import load_presets
 from app.schemas.api import (
+    BatchSearchAccepted,
+    BatchSearchItem,
+    BatchSearchRequest,
     SearchAccepted,
     SearchJobPage,
     SearchJobResponse,
@@ -26,26 +31,7 @@ async def create_search(
     session: SessionDependency,
     settings: SettingsDependency,
 ) -> SearchAccepted:
-    enabled = set(settings.enabled_sources)
-    requested = request.sources or settings.enabled_sources
-    if not enabled or not requested:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": "NO_ENABLED_SOURCES",
-                "message": "Не настроен ни один источник поиска",
-            },
-        )
-    disabled = set(requested) - enabled
-    if disabled:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": "SOURCE_NOT_ENABLED",
-                "message": "Запрошенный источник не настроен или не разрешён лицензией",
-                "sources": sorted(source.value for source in disabled),
-            },
-        )
+    requested = _resolve_sources(request.sources, settings)
     criteria = SearchCriteria(
         city=request.city,
         query=request.query,
@@ -56,6 +42,96 @@ async def create_search(
     job = await SearchJobRepository(session).create_with_outbox(criteria, tuple(requested))
     await session.commit()
     return SearchAccepted(id=job.id, status=job.status)
+
+
+def _resolve_sources(
+    requested: tuple[SourceName, ...] | None,
+    settings: Settings,
+) -> tuple[SourceName, ...]:
+    """Return the sources to run, refusing anything not configured or licensed."""
+    enabled = set(settings.enabled_sources)
+    resolved = requested or settings.enabled_sources
+    if not enabled or not resolved:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "NO_ENABLED_SOURCES",
+                "message": "Не настроен ни один источник поиска",
+            },
+        )
+    disabled = set(resolved) - enabled
+    if disabled:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "SOURCE_NOT_ENABLED",
+                "message": "Запрошенный источник не настроен или не разрешён лицензией",
+                "sources": sorted(source.value for source in disabled),
+            },
+        )
+    return tuple(resolved)
+
+
+@router.post(
+    "/batch",
+    response_model=BatchSearchAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def create_batch_search(
+    request: BatchSearchRequest,
+    session: SessionDependency,
+    settings: SettingsDependency,
+) -> BatchSearchAccepted:
+    """Queue one independent search per niche.
+
+    Separate jobs keep a failing niche from taking the rest down and leave a
+    per-niche row in the search runs sheet.
+    """
+    queries = _resolve_queries(request, settings)
+    sources = _resolve_sources(request.sources, settings)
+    repository = SearchJobRepository(session)
+    jobs = []
+    for query in queries:
+        criteria = SearchCriteria(
+            city=request.city,
+            query=query,
+            min_rating=request.min_rating,
+            min_reviews=request.min_reviews,
+            max_results=request.max_results,
+        )
+        job = await repository.create_with_outbox(criteria, sources)
+        jobs.append(job)
+    await session.commit()
+    return BatchSearchAccepted(
+        city=request.city,
+        preset=request.preset,
+        jobs=tuple(BatchSearchItem(id=job.id, query=job.query, status=job.status) for job in jobs),
+    )
+
+
+def _resolve_queries(request: BatchSearchRequest, settings: Settings) -> tuple[str, ...]:
+    if request.queries is not None:
+        queries = request.queries
+    else:
+        presets = load_presets(settings.niche_presets_file)
+        preset = presets.get(request.preset or "")
+        if preset is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": "PRESET_NOT_FOUND", "message": "Набор ниш не найден"},
+            )
+        queries = preset.queries
+    if len(queries) > settings.max_batch_searches:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "BATCH_TOO_LARGE",
+                "message": (
+                    f"За один раз можно запустить не больше {settings.max_batch_searches} ниш"
+                ),
+            },
+        )
+    return queries
 
 
 @router.get("", response_model=SearchJobPage)

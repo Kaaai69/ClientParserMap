@@ -57,6 +57,32 @@ curl -X POST http://127.0.0.1:8000/search \
 curl -H "X-API-Key: $API_AUTH_KEY" http://127.0.0.1:8000/search/1
 ```
 
+## Наборы ниш
+
+Ниша не обязана быть одна. `app/presets/niche_presets.toml` описывает наборы, и кнопка «Запустить поиск» в режиме «Набор ниш» ставит **отдельный запуск на каждую нишу**: одна упавшая ниша не роняет остальные, и в листе «Запуски поиска» видно, что именно дала каждая.
+
+Файл читается на старте, менять его можно без изменения кода:
+
+```toml
+[[preset]]
+id = "auto"
+title = "Авто"
+queries = ["детейлинг", "шиномонтаж", "автосервис"]
+```
+
+Готовые наборы: `small_business` (15 ниш), `auto`, `beauty`, `services`.
+
+```bash
+curl -X POST http://127.0.0.1:8000/search/batch \
+  -H 'Content-Type: application/json' \
+  -H "X-API-Key: $API_AUTH_KEY" \
+  -d '{"city":"Москва","preset":"auto","max_results":300}'
+```
+
+Вместо `preset` можно передать произвольный список: `{"queries":["кафе","пекарня"]}`. Размер пачки ограничен `MAX_BATCH_SEARCHES` (по умолчанию 50).
+
+Сплошной поиск по городу без ниши не поддерживается: 2ГИС и Google — text-search API и требуют запрос. Для полного охвата используйте набор ниш.
+
 ## Конфигурация источников
 
 Минимально задайте один ключ:
@@ -134,7 +160,7 @@ docker compose exec api uv run --no-sync python -m app.cli search \
 
 - `GET /` — веб-консоль.
 - `GET /meta` — включённые источники, порог score и ссылка на таблицу; консоль рисует себя по этому ответу.
-- `POST /search`, `GET /search` (список запусков), `GET /search/{id}` (один запуск).
+- `POST /search`, `POST /search/batch` (пачка ниш), `GET /search` (список запусков), `GET /search/{id}` (один запуск).
 - `GET /leads`, `GET /companies/{id}`.
 - `GET /health/live`, `GET /health/ready`.
 

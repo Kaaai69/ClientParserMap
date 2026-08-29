@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.core.enums import (
     CMS,
@@ -86,12 +86,68 @@ class SearchJobPage(ApiModel):
     offset: int
 
 
+class NichePresetResponse(ApiModel):
+    id: str
+    title: str
+    queries: tuple[str, ...]
+
+
 class MetaResponse(ApiModel):
     enabled_sources: tuple[SourceName, ...]
     sheets_enabled: bool
     spreadsheet_url: str | None
     lead_score_threshold: int
     auth_required: bool
+    niche_presets: tuple[NichePresetResponse, ...]
+    max_batch_searches: int
+
+
+class BatchSearchRequest(ApiModel):
+    city: str = Field(min_length=1, max_length=200)
+    preset: str | None = None
+    queries: tuple[str, ...] | None = None
+    sources: tuple[SourceName, ...] | None = None
+    min_rating: float | None = Field(default=None, ge=0, le=5)
+    min_reviews: int | None = Field(default=None, ge=0)
+    max_results: int = Field(default=500, ge=1, le=5000)
+
+    @field_validator("city")
+    @classmethod
+    def strip_non_empty_city(cls, value: str) -> str:
+        value = " ".join(value.split())
+        if not value:
+            raise ValueError("must not be blank")
+        return value
+
+    @field_validator("queries")
+    @classmethod
+    def queries_are_clean_and_unique(cls, value: tuple[str, ...] | None) -> tuple[str, ...] | None:
+        if value is None:
+            return None
+        cleaned = tuple(" ".join(item.split()) for item in value)
+        if not cleaned or any(not item for item in cleaned):
+            raise ValueError("queries must not be blank")
+        if len(set(cleaned)) != len(cleaned):
+            raise ValueError("queries must be unique")
+        return cleaned
+
+    @model_validator(mode="after")
+    def exactly_one_source_of_queries(self) -> "BatchSearchRequest":
+        if (self.preset is None) == (self.queries is None):
+            raise ValueError("provide either preset or queries")
+        return self
+
+
+class BatchSearchItem(ApiModel):
+    id: int
+    query: str
+    status: JobStatus
+
+
+class BatchSearchAccepted(ApiModel):
+    city: str
+    preset: str | None
+    jobs: tuple[BatchSearchItem, ...]
 
 
 class LeadSummary(ApiModel):

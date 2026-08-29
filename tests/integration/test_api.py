@@ -167,3 +167,94 @@ async def test_console_page_is_served_without_the_api_key() -> None:
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
         assert "Парсер" in response.text
+
+
+async def test_batch_search_queues_one_job_per_niche() -> None:
+    settings = Settings(_env_file=None, openstreetmap_enabled=True)
+    async for client in client_for(settings):
+        response = await client.post(
+            "/search/batch",
+            json={"city": "Москва", "preset": "auto", "max_results": 100},
+        )
+
+        assert response.status_code == 202
+        payload = response.json()
+        assert payload["city"] == "Москва"
+        assert payload["preset"] == "auto"
+        queries = [item["query"] for item in payload["jobs"]]
+        assert "детейлинг" in queries and "шиномонтаж" in queries
+        assert len(set(item["id"] for item in payload["jobs"])) == len(queries)
+        assert all(item["status"] == "PENDING" for item in payload["jobs"])
+
+        listed = await client.get(f"/search?limit={len(queries)}")
+        assert listed.json()["total"] == len(queries)
+
+
+async def test_batch_search_accepts_explicit_queries() -> None:
+    settings = Settings(_env_file=None, openstreetmap_enabled=True)
+    async for client in client_for(settings):
+        response = await client.post(
+            "/search/batch",
+            json={"city": "Казань", "queries": ["барбершоп", "кафе"]},
+        )
+
+        assert response.status_code == 202
+        assert [item["query"] for item in response.json()["jobs"]] == ["барбершоп", "кафе"]
+
+
+async def test_batch_search_rejects_an_unknown_preset() -> None:
+    settings = Settings(_env_file=None, openstreetmap_enabled=True)
+    async for client in client_for(settings):
+        response = await client.post("/search/batch", json={"city": "Москва", "preset": "нет"})
+
+        assert response.status_code == 404
+        assert response.json()["detail"]["code"] == "PRESET_NOT_FOUND"
+
+
+async def test_batch_search_requires_exactly_one_query_source() -> None:
+    settings = Settings(_env_file=None, openstreetmap_enabled=True)
+    async for client in client_for(settings):
+        assert (await client.post("/search/batch", json={"city": "Москва"})).status_code == 422
+
+        both = await client.post(
+            "/search/batch",
+            json={"city": "Москва", "preset": "auto", "queries": ["кафе"]},
+        )
+
+        assert both.status_code == 422
+
+
+async def test_batch_search_refuses_a_source_that_is_not_enabled() -> None:
+    settings = Settings(_env_file=None, openstreetmap_enabled=True)
+    async for client in client_for(settings):
+        response = await client.post(
+            "/search/batch",
+            json={"city": "Москва", "preset": "auto", "sources": ["google"]},
+        )
+
+        assert response.status_code == 409
+        assert response.json()["detail"]["code"] == "SOURCE_NOT_ENABLED"
+
+
+async def test_batch_search_caps_the_number_of_niches() -> None:
+    settings = Settings(_env_file=None, openstreetmap_enabled=True, max_batch_searches=2)
+    async for client in client_for(settings):
+        response = await client.post(
+            "/search/batch",
+            json={"city": "Москва", "queries": ["кафе", "бар", "пекарня"]},
+        )
+
+        assert response.status_code == 409
+        assert response.json()["detail"]["code"] == "BATCH_TOO_LARGE"
+
+
+async def test_meta_lists_the_niche_presets() -> None:
+    settings = Settings(_env_file=None, openstreetmap_enabled=True)
+    async for client in client_for(settings):
+        payload = (await client.get("/meta")).json()
+
+        presets = {item["id"]: item for item in payload["niche_presets"]}
+        assert "small_business" in presets
+        assert presets["small_business"]["title"] == "Малый бизнес"
+        assert len(presets["small_business"]["queries"]) >= 10
+        assert payload["max_batch_searches"] == 50

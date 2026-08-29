@@ -176,7 +176,8 @@ a.sheet-link:hover { color: var(--ink); }
 
 .field input[type="text"],
 .field input[type="number"],
-.field input[type="password"] {
+.field input[type="password"],
+.field select {
   width: 100%;
   font-family: var(--body);
   font-size: 15px;
@@ -186,6 +187,31 @@ a.sheet-link:hover { color: var(--ink); }
   border-radius: 2px;
   padding: 9px 10px;
 }
+
+/* mode switch: a preset run and a one-off niche are different jobs */
+
+.modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.mode {
+  font-family: var(--data);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--panel-sunk);
+  border: none;
+  padding: 9px 6px;
+  cursor: pointer;
+}
+
+.mode + .mode { border-left: 1px solid var(--line); }
+.mode.is-on { background: var(--ink); color: var(--panel); }
 
 .field input:focus-visible,
 button:focus-visible,
@@ -338,6 +364,67 @@ button.go:disabled { opacity: 0.45; cursor: not-allowed; }
 }
 
 .step-count.empty { color: var(--hairline); }
+
+/* ---- batch: one chip per niche, each its own run ---- */
+
+.batch { margin-bottom: 18px; }
+
+.tally {
+  font-family: var(--data);
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.tally b {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--body);
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--panel-sunk);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: 5px 9px;
+  cursor: pointer;
+}
+
+.chip:hover { border-color: var(--ink); }
+.chip.is-pick { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+
+.chip::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--line);
+  flex: none;
+}
+
+.chip.s-run::before { background: var(--signal); }
+.chip.s-ok::before { background: var(--done); }
+.chip.s-warn::before { background: #8a5a00; }
+.chip.s-err::before { background: var(--alert); }
+
+.chip b {
+  font-family: var(--data);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
 
 /* ---- run header ---- */
 
@@ -495,8 +582,20 @@ tr.pick:hover td { background: var(--panel-sunk); }
             <input type="text" id="city" required placeholder="Москва" autocomplete="off">
           </div>
           <div class="field">
+            <label>Что искать</label>
+            <div class="modes" id="modes">
+              <button type="button" class="mode is-on" data-mode="preset">Набор ниш</button>
+              <button type="button" class="mode" data-mode="single">Своя ниша</button>
+            </div>
+          </div>
+          <div class="field" id="presetField">
+            <label for="preset">Набор</label>
+            <select id="preset"></select>
+            <p class="hint" id="presetHint"></p>
+          </div>
+          <div class="field" id="queryField" hidden>
             <label for="query">Ниша</label>
-            <input type="text" id="query" required placeholder="детейлинг" autocomplete="off">
+            <input type="text" id="query" placeholder="детейлинг" autocomplete="off">
             <p class="hint">То, что вы искали бы руками в справочнике.</p>
           </div>
           <div class="field">
@@ -527,6 +626,11 @@ tr.pick:hover td { background: var(--panel-sunk); }
 
         <div id="idle" class="idle">
           Запусков ещё не было. Заполните форму слева — этапы появятся здесь.
+        </div>
+
+        <div id="batch" class="batch" hidden>
+          <p class="tally" id="tally"></p>
+          <div class="chips" id="chips"></div>
         </div>
 
         <div id="run" hidden>
@@ -599,7 +703,9 @@ tr.pick:hover td { background: var(--panel-sunk); }
 
   let meta = null;
   let pollTimer = null;
-  let watching = null;
+  let watching = null;   // job id shown in the rail
+  let batch = null;      // {title, ids:[...]} while a preset run is tracked
+  let mode = "preset";
 
   async function api(path, options) {
     const opts = options || {};
@@ -651,9 +757,53 @@ tr.pick:hover td { background: var(--panel-sunk); }
     $("app").hidden = false;
     renderRig();
     renderSources();
+    renderPresets();
     renderRail(null);
     await loadHistory();
   }
+
+  function renderPresets() {
+    const select = $("preset");
+    select.textContent = "";
+    const presets = meta.niche_presets || [];
+    for (const preset of presets) {
+      const option = el("option");
+      option.value = preset.id;
+      option.textContent = `${preset.title} — ${preset.queries.length} ниш`;
+      select.append(option);
+    }
+    if (!presets.length) {
+      setMode("single");
+      $("modes").hidden = true;
+      $("presetField").hidden = true;
+      return;
+    }
+    describePreset();
+    select.addEventListener("change", describePreset);
+  }
+
+  function currentPreset() {
+    return (meta.niche_presets || []).find((item) => item.id === $("preset").value) || null;
+  }
+
+  function describePreset() {
+    const preset = currentPreset();
+    $("presetHint").textContent = preset ? preset.queries.join(", ") : "";
+  }
+
+  function setMode(next) {
+    mode = next;
+    for (const button of $("modes").querySelectorAll(".mode")) {
+      button.classList.toggle("is-on", button.dataset.mode === next);
+    }
+    $("presetField").hidden = next !== "preset";
+    $("queryField").hidden = next !== "single";
+  }
+
+  $("modes").addEventListener("click", (event) => {
+    const button = event.target.closest(".mode");
+    if (button) setMode(button.dataset.mode);
+  });
 
   function renderRig() {
     const rig = $("rig");
@@ -812,11 +962,12 @@ tr.pick:hover td { background: var(--panel-sunk); }
     if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
   }
 
-  async function watch(jobId) {
+  async function watch(jobId, keepBatch) {
     watching = jobId;
+    if (!keepBatch) { batch = null; $("batch").hidden = true; }
     stopPolling();
     const tick = async () => {
-      if (watching !== jobId) return;
+      if (watching !== jobId || batch) return;
       let job;
       try {
         job = await api("/search/" + jobId);
@@ -828,6 +979,85 @@ tr.pick:hover td { background: var(--panel-sunk); }
       renderRun(job);
       const running = job.status === "PENDING" || job.status === "RUNNING";
       if (running) {
+        pollTimer = setTimeout(tick, POLL_MS);
+      } else {
+        setBusy(false);
+        await loadHistory();
+      }
+    };
+    await tick();
+  }
+
+  /* ---------- batch tracking ---------- */
+
+  const RUNNING_STATES = new Set(["PENDING", "RUNNING"]);
+
+  function chipClass(status) {
+    if (RUNNING_STATES.has(status)) return "s-run";
+    if (status === "COMPLETED") return "s-ok";
+    if (status === "COMPLETED_WITH_ERRORS") return "s-warn";
+    return "s-err";
+  }
+
+  function renderBatch(jobs) {
+    $("idle").hidden = true;
+    $("batch").hidden = false;
+
+    const done = jobs.filter((job) => !RUNNING_STATES.has(job.status)).length;
+    const sum = (field) => jobs.reduce((total, job) => total + (job[field] || 0), 0);
+    $("tally").innerHTML =
+      `${batch.title} · готово <b>${done}</b> из <b>${jobs.length}</b>` +
+      ` · найдено <b>${sum("found_count")}</b>` +
+      ` · лидов <b>${sum("lead_count")}</b>` +
+      ` · в таблице <b>${sum("exported_count")}</b>`;
+
+    const chips = $("chips");
+    chips.textContent = "";
+    for (const job of jobs) {
+      const chip = el("button", "chip " + chipClass(job.status));
+      chip.type = "button";
+      if (job.id === watching) chip.classList.add("is-pick");
+      const name = el("span");
+      name.textContent = job.query;
+      const count = el("b");
+      count.textContent = RUNNING_STATES.has(job.status) ? "…" : String(job.lead_count);
+      chip.append(name, count);
+      chip.addEventListener("click", async () => {
+        watching = job.id;
+        renderBatch(jobs);
+        renderRun(await api("/search/" + job.id));
+      });
+      chips.append(chip);
+    }
+  }
+
+  async function watchBatch(items, title) {
+    batch = { title, ids: items.map((item) => item.id) };
+    watching = items[0].id;
+    stopPolling();
+
+    const tick = async () => {
+      if (!batch) return;
+      let page;
+      try {
+        page = await api("/search?limit=" + Math.min(100, batch.ids.length + 5));
+      } catch (error) {
+        if (error.code === 401) { showGate("Ключ не подошёл."); return; }
+        pollTimer = setTimeout(tick, POLL_MS * 2);
+        return;
+      }
+      const mine = batch.ids
+        .map((id) => page.items.find((item) => item.id === id))
+        .filter(Boolean);
+      if (!mine.length) { pollTimer = setTimeout(tick, POLL_MS); return; }
+
+      renderBatch(mine);
+      const current = mine.find((job) => job.id === watching);
+      if (current) {
+        // The summary lacks the per-stage counters, so read the full job.
+        try { renderRun(await api("/search/" + current.id)); } catch { /* keep polling */ }
+      }
+      if (mine.some((job) => RUNNING_STATES.has(job.status))) {
         pollTimer = setTimeout(tick, POLL_MS);
       } else {
         setBusy(false);
@@ -894,28 +1124,47 @@ tr.pick:hover td { background: var(--panel-sunk); }
     const sources = Array.from($("sources").querySelectorAll("input:checked")).map((input) => input.value);
     if (!sources.length) { note("Выберите хотя бы один источник.", true); return; }
 
+    const city = $("city").value.trim();
+    if (!city) { note("Укажите город.", true); return; }
+
     const payload = {
-      city: $("city").value.trim(),
-      query: $("query").value.trim(),
+      city: city,
       max_results: Number($("max").value) || 300,
       sources: sources
     };
-    if (!payload.city || !payload.query) { note("Заполните город и нишу.", true); return; }
     if ($("rating").value !== "") payload.min_rating = Number($("rating").value);
     if ($("reviews").value !== "") payload.min_reviews = Number($("reviews").value);
+
+    const preset = currentPreset();
+    if (mode === "preset") {
+      if (!preset) { note("Выберите набор ниш.", true); return; }
+      payload.preset = preset.id;
+    } else {
+      payload.query = $("query").value.trim();
+      if (!payload.query) { note("Укажите нишу.", true); return; }
+    }
 
     setBusy(true);
     let accepted;
     try {
-      accepted = await api("/search", { method: "POST", body: JSON.stringify(payload) });
+      accepted = await api(mode === "preset" ? "/search/batch" : "/search", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
     } catch (error) {
       setBusy(false);
       if (error.code === 401) { showGate("Ключ не подошёл."); return; }
       note(error.message, true);
       return;
     }
-    note("Запуск №" + accepted.id + " принят.");
-    await watch(accepted.id);
+
+    if (mode === "preset") {
+      note(`Принято ${accepted.jobs.length} запусков.`);
+      await watchBatch(accepted.jobs, preset.title);
+    } else {
+      note("Запуск №" + accepted.id + " принят.");
+      await watch(accepted.id);
+    }
   });
 
   boot();
