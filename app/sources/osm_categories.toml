@@ -1,0 +1,123 @@
+# Перевод ниши в теги OpenStreetMap.
+#
+# Без него источник ищет слово в названии компании, а это мимо: в Москве
+# 888 автосервисов по тегу shop=car_repair и только 44 со словом
+# «автосервис» в названии. Теги ловят категорию целиком.
+#
+# queries   — как нишу пишут в форме поиска (в нижнем регистре).
+# selectors — теги OSM вида "ключ=значение"; объект попадает в выдачу,
+#             если совпал хотя бы один.
+#
+# Ниша, которой здесь нет, ищется по тексту названия — как раньше.
+
+[[category]]
+queries = ["детейлинг", "автодетейлинг", "детейлинг авто", "detailing", "car detailing"]
+selectors = ["amenity=car_wash", "shop=car_repair"]
+
+[[category]]
+queries = ["автомойка", "мойка авто", "автомойки"]
+selectors = ["amenity=car_wash"]
+
+[[category]]
+queries = ["автосервис", "автомастерская", "сто", "ремонт авто", "кузовной ремонт", "тонировка"]
+selectors = ["shop=car_repair"]
+
+[[category]]
+queries = ["шиномонтаж", "шины", "шиномонтажка"]
+selectors = ["shop=tyres"]
+
+[[category]]
+queries = ["автозапчасти", "запчасти"]
+selectors = ["shop=car_parts"]
+
+[[category]]
+queries = ["автошкола", "автошколы"]
+selectors = ["amenity=driving_school"]
+
+[[category]]
+queries = ["барбершоп", "парикмахерская", "парикмахерские", "barbershop"]
+selectors = ["shop=hairdresser"]
+
+[[category]]
+queries = ["салон красоты", "маникюр", "ногтевой сервис", "косметология", "лашмейкер"]
+selectors = ["shop=beauty"]
+
+[[category]]
+queries = ["массаж", "массажный салон", "спа", "spa"]
+selectors = ["shop=massage", "leisure=spa"]
+
+[[category]]
+queries = ["стоматология", "стоматолог", "зубной"]
+selectors = ["amenity=dentist"]
+
+[[category]]
+queries = ["ветеринарная клиника", "ветклиника", "ветеринар"]
+selectors = ["amenity=veterinary"]
+
+[[category]]
+queries = ["медцентр", "медицинский центр", "клиника"]
+selectors = ["amenity=clinic", "amenity=doctors"]
+
+[[category]]
+queries = ["кафе", "кофейня", "кофе"]
+selectors = ["amenity=cafe"]
+
+[[category]]
+queries = ["ресторан", "рестораны"]
+selectors = ["amenity=restaurant"]
+
+[[category]]
+queries = ["бар", "паб", "бары"]
+selectors = ["amenity=bar", "amenity=pub"]
+
+[[category]]
+queries = ["пекарня", "пекарни", "выпечка"]
+selectors = ["shop=bakery"]
+
+[[category]]
+queries = ["фитнес-клуб", "фитнес", "тренажерный зал", "йога", "спортзал"]
+selectors = ["leisure=fitness_centre", "leisure=sports_centre"]
+
+[[category]]
+queries = ["химчистка", "прачечная", "клининг"]
+selectors = ["shop=dry_cleaning", "shop=laundry"]
+
+[[category]]
+queries = ["ремонт техники", "ремонт телефонов", "сервисный центр"]
+selectors = ["shop=electronics_repair", "craft=electronics_repair"]
+
+[[category]]
+queries = ["мебель на заказ", "мебель", "кухни на заказ"]
+selectors = ["shop=furniture", "craft=cabinet_maker"]
+
+[[category]]
+queries = ["окна пвх", "окна", "остекление"]
+selectors = ["shop=windows", "craft=window_construction"]
+
+[[category]]
+queries = ["ремонт квартир", "отделка", "строительная компания"]
+selectors = ["craft=builder", "shop=doityourself"]
+
+[[category]]
+queries = ["юридические услуги", "юрист", "адвокат"]
+selectors = ["office=lawyer"]
+
+[[category]]
+queries = ["бухгалтерские услуги", "бухгалтер", "бухгалтерия"]
+selectors = ["office=accountant"]
+
+[[category]]
+queries = ["турагентство", "туры", "туристическое агентство"]
+selectors = ["shop=travel_agency", "office=travel_agent"]
+
+[[category]]
+queries = ["цветы", "цветочный магазин", "флорист"]
+selectors = ["shop=florist"]
+
+[[category]]
+queries = ["зоомагазин", "товары для животных"]
+selectors = ["shop=pet"]
+
+[[category]]
+queries = ["груминг", "стрижка собак"]
+selectors = ["shop=pet_grooming"]

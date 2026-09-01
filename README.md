@@ -111,6 +111,16 @@ OpenStreetMap не требует ключа, но выключен по умо�
 OPENSTREETMAP_ENABLED=true
 ```
 
+Ниша переводится в теги OSM по файлу `app/sources/osm_categories.toml`. Это принципиально: в Москве 888 автосервисов имеют тег `shop=car_repair` и только 44 пишут «автосервис» в названии, поэтому поиск по слову в названии теряет большую часть категории. Ниша, которой нет в файле, ищется по тексту названия — как раньше.
+
+Файл правится без изменения кода:
+
+```toml
+[[category]]
+queries = ["автосервис", "автомастерская", "сто"]
+selectors = ["shop=car_repair"]
+```
+
 Данные © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) и доступны на условиях ODbL. Общий endpoint Overpass не имеет коммерческого SLA; для устойчивого высоконагруженного сбора используйте собственный Overpass или endpoint с подходящим договором.
 
 ## Google Sheets

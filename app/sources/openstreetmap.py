@@ -1,22 +1,66 @@
 import json
 import re
+import tomllib
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 import httpx
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from app.core.config import Settings
 from app.core.enums import ContactsAccess, SourceName
-from app.core.errors import SourceRequestError
+from app.core.errors import ConfigurationError, SourceRequestError
 from app.schemas.domain import SearchCriteria, SourceCompany, SourcePage
 from app.sources.http import ResilientHttpClient
 
 OVERPASS_API_URL = "https://overpass-api.de/api/interpreter"
 OVERPASS_QUERY_TIMEOUT_SECONDS = 60
-DETAILING_ALIASES = frozenset(
-    {"детейлинг", "автодетейлинг", "детейлинг авто", "detailing", "car detailing"}
-)
 TEXT_TAGS = ("name", "brand", "operator", "description", "service")
+CATEGORY_FILE = Path(__file__).with_name("osm_categories.toml")
+SELECTOR_PATTERN = re.compile(r"^([A-Za-z_:]+)=([^\s\"]+)$")
+
+
+class OsmCategory(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    queries: tuple[str, ...] = Field(min_length=1)
+    selectors: tuple[str, ...] = Field(min_length=1)
+
+    @field_validator("queries")
+    @classmethod
+    def queries_are_folded(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(" ".join(item.split()).casefold() for item in value)
+
+    @field_validator("selectors")
+    @classmethod
+    def selectors_are_key_value(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        for item in value:
+            if not SELECTOR_PATTERN.match(item):
+                raise ValueError(f"selector must look like key=value, got {item!r}")
+        return value
+
+
+class OsmCategories(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    category: tuple[OsmCategory, ...] = Field(default=())
+
+    def selectors_for(self, query: str) -> tuple[str, ...] | None:
+        folded = " ".join(query.split()).casefold()
+        for item in self.category:
+            if folded in item.queries:
+                return item.selectors
+        return None
+
+
+@lru_cache(maxsize=1)
+def load_categories() -> OsmCategories:
+    try:
+        with CATEGORY_FILE.open("rb") as categories_file:
+            return OsmCategories.model_validate(tomllib.load(categories_file))
+    except (OSError, tomllib.TOMLDecodeError, ValidationError) as error:
+        raise ConfigurationError("Некорректный файл категорий OpenStreetMap") from error
 
 
 class OpenStreetMapSource:
@@ -62,14 +106,11 @@ class OpenStreetMapSource:
 
 def _build_query(criteria: SearchCriteria) -> str:
     """Return the bounded administrative-area Overpass QL query."""
-    query = criteria.query.casefold()
-    if query in DETAILING_ALIASES:
-        # Require a name server-side: the row limit is spent before mapping, and
-        # unnamed car washes would otherwise crowd out every usable result.
-        selectors = (
-            'nwr["amenity"="car_wash"]["name"](area.searchArea);\n'
-            'nwr["shop"="car_repair"]["name"](area.searchArea);\n'
-        )
+    mapped = load_categories().selectors_for(criteria.query)
+    if mapped is not None:
+        # Tags catch the whole category; matching the niche as a word in the
+        # name finds only the few businesses that spell it out.
+        selectors = _category_selectors(mapped)
     else:
         selectors = _text_selectors(_regex(criteria.query))
     return (
@@ -191,6 +232,22 @@ def _tag_values(tags: dict[str, Any], keys: tuple[str, ...]) -> tuple[str, ...]:
             if text and text not in values:
                 values.append(text)
     return tuple(values)
+
+
+def _category_selectors(selectors: tuple[str, ...]) -> str:
+    """Render tag selectors, each requiring a name.
+
+    The row limit applies before mapping, so unnamed objects would otherwise
+    crowd out every usable result.
+    """
+    lines = []
+    for selector in selectors:
+        match = SELECTOR_PATTERN.match(selector)
+        if match is None:  # pragma: no cover - validated on load
+            raise ConfigurationError(f"Некорректный селектор OpenStreetMap: {selector}")
+        key, value = match.groups()
+        lines.append(f'nwr[{_quoted(key)}={_quoted(value)}]["name"](area.searchArea);\n')
+    return "".join(lines)
 
 
 def _text_selectors(pattern: str) -> str:
