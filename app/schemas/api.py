@@ -86,6 +86,10 @@ class SearchJobPage(ApiModel):
     offset: int
 
 
+class SessionRequest(ApiModel):
+    key: str = Field(min_length=1, max_length=500)
+
+
 class NichePresetResponse(ApiModel):
     id: str
     title: str

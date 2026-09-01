@@ -258,3 +258,63 @@ async def test_meta_lists_the_niche_presets() -> None:
         assert presets["small_business"]["title"] == "Малый бизнес"
         assert len(presets["small_business"]["queries"]) >= 10
         assert payload["max_batch_searches"] == 50
+
+
+async def test_session_cookie_replaces_the_header_after_signing_in() -> None:
+    settings = Settings(
+        _env_file=None,
+        openstreetmap_enabled=True,
+        api_auth_key=SecretStr("s3cret"),
+    )
+    async for client in client_for(settings):
+        assert (await client.get("/meta")).status_code == 401
+
+        signin = await client.post("/auth/session", json={"key": "s3cret"})
+
+        assert signin.status_code == 204
+        cookie = signin.cookies["cp_session"]
+        assert cookie == "s3cret"
+        # No header from here on: the client keeps the cookie.
+        assert (await client.get("/meta")).status_code == 200
+        created = await client.post("/search", json={"city": "Москва", "query": "кафе"})
+        assert created.status_code == 202
+
+
+async def test_session_cookie_is_http_only_and_long_lived() -> None:
+    settings = Settings(_env_file=None, api_auth_key=SecretStr("s3cret"))
+    async for client in client_for(settings):
+        response = await client.post("/auth/session", json={"key": "s3cret"})
+
+        header = response.headers["set-cookie"]
+        assert "HttpOnly" in header
+        assert "SameSite=strict" in header
+        assert "Max-Age=15552000" in header
+
+
+async def test_a_wrong_key_never_creates_a_session() -> None:
+    settings = Settings(_env_file=None, api_auth_key=SecretStr("s3cret"))
+    async for client in client_for(settings):
+        response = await client.post("/auth/session", json={"key": "wrong"})
+
+        assert response.status_code == 401
+        assert "cp_session" not in response.cookies
+        assert (await client.get("/meta")).status_code == 401
+
+
+async def test_signing_out_clears_the_session() -> None:
+    settings = Settings(_env_file=None, api_auth_key=SecretStr("s3cret"))
+    async for client in client_for(settings):
+        await client.post("/auth/session", json={"key": "s3cret"})
+        assert (await client.get("/meta")).status_code == 200
+
+        assert (await client.delete("/auth/session")).status_code == 204
+
+        assert (await client.get("/meta")).status_code == 401
+
+
+async def test_the_api_key_header_still_works_for_scripts() -> None:
+    settings = Settings(_env_file=None, api_auth_key=SecretStr("s3cret"))
+    async for client in client_for(settings):
+        response = await client.get("/meta", headers={"X-API-Key": "s3cret"})
+
+        assert response.status_code == 200

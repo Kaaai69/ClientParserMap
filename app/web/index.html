@@ -559,7 +559,7 @@ tr.pick:hover td { background: var(--panel-sunk); }
     <div class="field">
       <label for="key">Ключ API</label>
       <input type="password" id="key" autocomplete="current-password" placeholder="X-API-Key">
-      <p class="hint">Ключ хранится только в этом браузере и уходит в заголовке каждого запроса.</p>
+      <p class="hint">Вводится один раз: браузер запомнит вход на полгода. Ключ лежит в <code>.env</code> на сервере.</p>
     </div>
     <button class="go" id="keygo">Войти</button>
     <p class="formnote" id="keynote"></p>
@@ -675,7 +675,6 @@ tr.pick:hover td { background: var(--panel-sunk); }
 (() => {
   "use strict";
 
-  const KEY_STORE = "client-parser-key";
   const POLL_MS = 2000;
 
   // The six stages are the pipeline itself, in order. Each carries the counter
@@ -698,9 +697,6 @@ tr.pick:hover td { background: var(--panel-sunk); }
   const $ = (id) => document.getElementById(id);
   const el = (tag, cls) => { const n = document.createElement(tag); if (cls) n.className = cls; return n; };
 
-  let apiKey = "";
-  try { apiKey = localStorage.getItem(KEY_STORE) || ""; } catch { apiKey = ""; }
-
   let meta = null;
   let pollTimer = null;
   let watching = null;   // job id shown in the rail
@@ -710,8 +706,11 @@ tr.pick:hover td { background: var(--panel-sunk); }
   async function api(path, options) {
     const opts = options || {};
     const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
-    if (apiKey) headers["X-API-Key"] = apiKey;
-    const response = await fetch(path, Object.assign({}, opts, { headers }));
+    // The session cookie rides along on its own; nothing to attach here.
+    const response = await fetch(path, Object.assign({}, opts, {
+      headers,
+      credentials: "same-origin"
+    }));
     if (response.status === 401) { throw Object.assign(new Error("unauthorized"), { code: 401 }); }
     const body = response.status === 204 ? null : await response.json().catch(() => null);
     if (!response.ok) {
@@ -733,9 +732,18 @@ tr.pick:hover td { background: var(--panel-sunk); }
   }
 
   $("keygo").addEventListener("click", async () => {
-    apiKey = $("key").value.trim();
-    if (!apiKey) { showGate("Введите ключ."); return; }
-    try { localStorage.setItem(KEY_STORE, apiKey); } catch { /* private mode */ }
+    const key = $("key").value.trim();
+    if (!key) { showGate("Введите ключ."); return; }
+    $("keygo").disabled = true;
+    try {
+      await api("/auth/session", { method: "POST", body: JSON.stringify({ key: key }) });
+    } catch (error) {
+      $("keygo").disabled = false;
+      showGate(error.code === 401 ? "Ключ не подошёл." : error.message);
+      return;
+    }
+    $("keygo").disabled = false;
+    $("key").value = "";
     await boot();
   });
 
@@ -749,7 +757,7 @@ tr.pick:hover td { background: var(--panel-sunk); }
     try {
       meta = await api("/meta");
     } catch (error) {
-      if (error.code === 401) { showGate(apiKey ? "Ключ не подошёл." : ""); return; }
+      if (error.code === 401) { showGate(""); return; }
       showGate("Сервис недоступен: " + error.message);
       return;
     }
